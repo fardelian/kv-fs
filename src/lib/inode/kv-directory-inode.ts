@@ -1,5 +1,5 @@
 import { INode } from './kv-inode';
-import { BlockDevice } from './kv-block-device';
+import { KvBlockDevice } from '../block-device/types';
 
 export type INodeType = 'directory' | 'file';
 export const INodeTypeMap: INodeType[] = ['directory', 'file'];
@@ -10,11 +10,11 @@ type DirectoryEntriesList = Map<string, number>;
 export class DirectoryINode extends INode<DirectoryEntriesList> {
     public static readonly MAX_NAME_LENGTH = 255;
     public static readonly OFFSET_NUM_ENTRIES = 16;
-    public static readonly OFFSET_SIZE = 20;
+    public static readonly OFFSET_ENTRIES_PREFIX = 20;
 
     private entries: DirectoryEntriesList;
 
-    constructor(blockDevice: BlockDevice, id: number) {
+    constructor(blockDevice: KvBlockDevice, id: number) {
         super(blockDevice, id);
 
         this.entries = new Map();
@@ -23,9 +23,16 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
         const numEntries = buffer.readInt32BE(DirectoryINode.OFFSET_NUM_ENTRIES);
 
         for (let i = 0; i < numEntries; i++) {
-            const nameLength = buffer.readInt8(20 + i * 268);
-            const name = buffer.toString('utf8', 20 + i * 268 + 1, 20 + i * 268 + 1 + nameLength);
-            const inodeId = buffer.readInt32BE(20 + i * 268 + 256);
+            const nameLength = buffer.readInt8(
+                DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268,
+            );
+
+            const OFFSET_NAME = DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268 + 1;
+
+            const name = buffer.toString('utf8', OFFSET_NAME, OFFSET_NAME + nameLength);
+
+            const inodeId = buffer.readInt32BE(OFFSET_NAME + DirectoryINode.MAX_NAME_LENGTH);
+
             this.entries.set(name, inodeId);
         }
     }
@@ -72,7 +79,7 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
         return this.entries.get(name);
     }
 
-    public static createEmptyDirectory(blockDevice: BlockDevice, id: number): DirectoryINode {
+    public static createEmptyDirectory(blockDevice: KvBlockDevice, id: number): DirectoryINode {
         const buffer = Buffer.alloc(blockDevice.blockSize);
         buffer.writeBigUInt64BE(BigInt(Date.now()), 0);
         buffer.writeBigUInt64BE(BigInt(Date.now()), 8);

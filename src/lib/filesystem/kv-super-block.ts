@@ -1,7 +1,7 @@
-import { BlockDevice } from './kv-block-device';
+import { KvBlockDevice } from '../block-device/types';
 
 export class SuperBlock {
-    private blockDevice: BlockDevice;
+    private blockDevice: KvBlockDevice;
     private superBlockId: number;
 
     public totalBlocks: number;
@@ -9,7 +9,7 @@ export class SuperBlock {
     public totalInodes: number;
     public rootDirectoryId: number;
 
-    constructor(blockDevice: BlockDevice, superBlockId: number) {
+    constructor(blockDevice: KvBlockDevice, superBlockId: number) {
         this.blockDevice = blockDevice;
         this.superBlockId = superBlockId;
 
@@ -21,20 +21,9 @@ export class SuperBlock {
         this.rootDirectoryId = buffer.readInt32BE(12);
     }
 
-    public writeSuperBlock(): void {
-        const buffer = Buffer.alloc(this.blockDevice.blockSize);
-
-        buffer.writeInt32BE(this.totalBlocks, 0);
-        buffer.writeInt32BE(this.blockSize, 4);
-        buffer.writeInt32BE(this.totalInodes, 8);
-        buffer.writeInt32BE(this.rootDirectoryId, 12);
-
-        this.blockDevice.writeBlock(0, buffer);
-    }
-
     public static createSuperBlock(
         id: number,
-        blockDevice: BlockDevice,
+        blockDevice: KvBlockDevice,
         totalBlocks: number,
         totalInodes: number,
         rootDirectory: number,

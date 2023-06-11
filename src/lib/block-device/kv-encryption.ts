@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'crypto';
 
-export class FileSystemEncryption {
+export class BlockDeviceEncryption {
     private static readonly KEY_LENGTH_BYTES = 32;
 
     private key: Buffer;
@@ -8,12 +8,12 @@ export class FileSystemEncryption {
 
     constructor(key?: Buffer) {
         if (key) {
-            if (key.length !== FileSystemEncryption.KEY_LENGTH_BYTES) {
+            if (key.length !== BlockDeviceEncryption.KEY_LENGTH_BYTES) {
                 throw new Error('Key must be 256 bits (32 bytes)');
             }
             this.key = key;
         } else {
-            this.key = randomBytes(FileSystemEncryption.KEY_LENGTH_BYTES); // Generate a new 256-bit key if none was provided
+            this.key = randomBytes(BlockDeviceEncryption.KEY_LENGTH_BYTES); // Generate a new 256-bit key if none was provided
         }
     }
 
@@ -63,7 +63,7 @@ export class FileSystemEncryption {
             password,
             salt,
             iterations,
-            FileSystemEncryption.KEY_LENGTH_BYTES,
+            BlockDeviceEncryption.KEY_LENGTH_BYTES,
             'sha512',
         );
     }

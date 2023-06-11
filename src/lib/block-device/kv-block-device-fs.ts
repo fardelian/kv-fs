@@ -1,16 +1,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { FileSystemEncryption } from './kv-encryption';
+import { BlockDeviceEncryption } from './kv-encryption';
+import { KvBlockDevice } from './types';
 
-export class BlockDevice {
+export class KvBlockDeviceFs implements KvBlockDevice {
     private readonly basePath: string;
     public readonly blockSize: number;
-    private readonly encryption?: FileSystemEncryption;
+    private readonly encryption?: BlockDeviceEncryption;
 
     constructor(
         basePath: string,
         blockSize: number,
-        encryption?: FileSystemEncryption,
+        encryption?: BlockDeviceEncryption,
     ) {
         this.basePath = basePath;
         this.blockSize = blockSize;

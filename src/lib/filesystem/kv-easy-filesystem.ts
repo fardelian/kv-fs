@@ -1,13 +1,13 @@
-import { FileINode } from './kv-file-inode';
-import { Filesystem } from './kv-filesystem';
-import { DirectoryINode } from './kv-directory-inode';
+import { FileINode } from '../inode/kv-file-inode';
+import { KvFilesystem } from './kv-filesystem';
+import { DirectoryINode } from '../inode/kv-directory-inode';
 
-export class EasyFilesystem {
-    private readonly filesystem: Filesystem;
+export class KvEasyFilesystem {
+    private readonly filesystem: KvFilesystem;
     private readonly separator;
 
     constructor(
-        filesystem: Filesystem,
+        filesystem: KvFilesystem,
         separator: string = '/',
     ) {
         this.filesystem = filesystem;

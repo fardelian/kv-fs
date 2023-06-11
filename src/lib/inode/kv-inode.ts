@@ -1,12 +1,12 @@
-import { BlockDevice } from './kv-block-device';
+import { KvBlockDevice } from '../block-device/types';
 
 export abstract class INode<DataType> {
     public readonly id: number;
     public readonly creationTime: Date;
     public modificationTime: Date;
-    public readonly blockDevice: BlockDevice;
+    public readonly blockDevice: KvBlockDevice;
 
-    protected constructor(blockDevice: BlockDevice, id: number) {
+    protected constructor(blockDevice: KvBlockDevice, id: number) {
         this.id = id;
         this.blockDevice = blockDevice;
 

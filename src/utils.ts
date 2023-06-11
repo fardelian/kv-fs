@@ -1,8 +1,8 @@
-import { EasyFilesystem } from './lib/kv-easy-filesystem';
+import { KvEasyFilesystem } from './lib/filesystem/kv-easy-filesystem';
 
 type DA = Record<string, DA[] | undefined>;
 
-export const tree = (easyFilesystem: EasyFilesystem, startDirectory: string): DA => {
+export const tree = (easyFilesystem: KvEasyFilesystem, startDirectory: string): DA => {
     const directory = easyFilesystem.getDirectory(startDirectory);
 
     directory.read().forEach((entry) => {

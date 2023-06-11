@@ -1,11 +1,11 @@
-import { BlockDevice } from './kv-block-device';
 import { INode } from './kv-inode';
+import { KvBlockDevice } from '../block-device/types';
 
 export class FileINode extends INode<Buffer> {
     public size: number;
     private readonly dataBlockIds: number[];
 
-    constructor(blockDevice: BlockDevice, id: number) {
+    constructor(blockDevice: KvBlockDevice, id: number) {
         super(blockDevice, id);
 
         const buffer = this.blockDevice.readBlock(this.id);
@@ -87,7 +87,7 @@ export class FileINode extends INode<Buffer> {
         this.modificationTime = new Date();
     }
 
-    public static createEmptyFile(blockDevice: BlockDevice): FileINode {
+    public static createEmptyFile(blockDevice: KvBlockDevice): FileINode {
         const id = blockDevice.getNextINodeId();
         const creationTime = new Date();
         const modificationTime = new Date();

@@ -1,13 +1,13 @@
-import { BlockDevice } from './kv-block-device';
 import { SuperBlock } from './kv-super-block';
-import { DirectoryINode } from './kv-directory-inode';
-import { FileINode } from './kv-file-inode';
+import { DirectoryINode } from '../inode/kv-directory-inode';
+import { FileINode } from '../inode/kv-file-inode';
+import { KvBlockDevice } from '../block-device/types';
 
-export class Filesystem {
-    private readonly blockDevice: BlockDevice;
+export class KvFilesystem {
+    private readonly blockDevice: KvBlockDevice;
     private readonly superBlock: SuperBlock;
 
-    constructor(blockDevice: BlockDevice, superBlockId: number) {
+    constructor(blockDevice: KvBlockDevice, superBlockId: number) {
         this.blockDevice = blockDevice;
         this.superBlock = new SuperBlock(blockDevice, superBlockId);
     }
@@ -66,12 +66,12 @@ export class Filesystem {
     // Filesystem operations
 
     public static format(
-        blockDevice: BlockDevice,
+        blockDevice: KvBlockDevice,
         totalBlocks: number,
         totalINodes: number,
         rootDirectoryId: number = 1,
         superBlockId: number = 0,
-    ): Filesystem {
+    ): KvFilesystem {
         let blockId = 0;
         while (blockDevice.existsBlock(blockId)) {
             blockDevice.freeBlock(blockId++);
@@ -80,6 +80,6 @@ export class Filesystem {
         SuperBlock.createSuperBlock(superBlockId, blockDevice, totalBlocks, totalINodes, rootDirectoryId);
         DirectoryINode.createEmptyDirectory(blockDevice, rootDirectoryId);
 
-        return new Filesystem(blockDevice, superBlockId);
+        return new KvFilesystem(blockDevice, superBlockId);
     }
 }

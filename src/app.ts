@@ -1,10 +1,12 @@
-import { FileSystemEncryption } from './lib/kv-encryption';
-import { BlockDevice } from './lib/kv-block-device';
-import { Filesystem } from './lib/kv-filesystem';
-import { EasyFilesystem } from './lib/kv-easy-filesystem';
+import { KvFilesystem } from './lib/filesystem/kv-filesystem';
+import { KvEasyFilesystem } from './lib/filesystem/kv-easy-filesystem';
+import { KvBlockDeviceFs } from './lib/block-device/kv-block-device-fs';
+
+const BLOCK_SIZE = 4096;
+const TOTAL_BLOCKS = 100;
+const TOTAL_NODES = 1000;
 
 const SUPER_BLOCK_ID = 0;
-const ROOT_DIRECTORY_ID = 1;
 
 // const password = FileSystemEncryption.keyFromPassword(
 //     'password',
@@ -12,28 +14,28 @@ const ROOT_DIRECTORY_ID = 1;
 //     100000,
 // );
 
-const blockDevice = new BlockDevice(
+const blockDevice = new KvBlockDeviceFs(
     `${__dirname}/../data`,
-    1024,
+    BLOCK_SIZE,
     // new FileSystemEncryption(password),
 );
 
 // Create file system
 
-Filesystem.format(blockDevice, 100, 100);
+KvFilesystem.format(blockDevice,TOTAL_BLOCKS,TOTAL_NODES);
 
-const fileSystem = new Filesystem(blockDevice, SUPER_BLOCK_ID);
-const easyFileSystem = new EasyFilesystem(fileSystem, '/');
+const fileSystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
+const easyFileSystem = new KvEasyFilesystem(fileSystem, '/');
 
 // Create test files
 
 easyFileSystem.createDirectory('/home/florin', true);
 
 const testWrite1 = '/home/florin/test1.txt';
-easyFileSystem.createFile(testWrite1).write( Buffer.from('hello world'));
+easyFileSystem.createFile(testWrite1).write(Buffer.from('hello world'));
 
 const testWrite2 = '/home/florin/test2.txt';
-easyFileSystem.createFile(testWrite2).write( Buffer.from('and hello again'));
+easyFileSystem.createFile(testWrite2).write(Buffer.from('and hello again'));
 
 // Read test files
 

@@ -11,6 +11,8 @@ export class FileINode extends INode<Buffer> {
     }
 
     public async init(): Promise<this> {
+        await super.init();
+
         const buffer = await this.blockDevice.readBlock(this.id);
 
         this.size = buffer.readInt32BE(16);
@@ -32,6 +34,8 @@ export class FileINode extends INode<Buffer> {
     }
 
     public async read(): Promise<Buffer> {
+        this.checkInit();
+
         let data = Buffer.alloc(this.size);
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
@@ -43,6 +47,8 @@ export class FileINode extends INode<Buffer> {
     }
 
     public async write(data: Buffer): Promise<void> {
+        this.checkInit();
+
         const requiredBlocks = Math.ceil(data.length / this.blockDevice.blockSize);
 
         // If more blocks are required, allocate them
@@ -82,6 +88,8 @@ export class FileINode extends INode<Buffer> {
     }
 
     public async unlink(): Promise<void> {
+        this.checkInit();
+
         for (let i = 0; i < this.dataBlockIds.length; i++) {
             await this.blockDevice.freeBlock(this.dataBlockIds[i]);
         }

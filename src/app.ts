@@ -1,14 +1,16 @@
 import { KvFilesystem } from './lib/filesystem/kv-filesystem';
-import { KvEasyFilesystem } from './lib/filesystem/kv-easy-filesystem';
+import { KvFilesystemEasy } from './lib/filesystem/kv-filesystem-easy';
 import { KvBlockDeviceFs } from './lib/block-device/kv-block-device-fs';
 
 const BLOCK_SIZE = 4096;
-const TOTAL_BLOCKS = 100;
-const TOTAL_NODES = 1000;
+const TOTAL_BLOCKS = 1000;
+const TOTAL_NODES = 100;
 
 const SUPER_BLOCK_ID = 0;
 
 async function run() {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const t0 = new Date().getTime();
 
 // const password = FileSystemEncryption.keyFromPassword(
 //     'password',
@@ -29,7 +31,7 @@ async function run() {
 
     const fileSystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
     await fileSystem.init();
-    const easyFileSystem = new KvEasyFilesystem(fileSystem, '/');
+    const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
     await easyFileSystem.init();
 
 // Create test files
@@ -50,12 +52,17 @@ async function run() {
     const testRead2 = await easyFileSystem.readFile('/home/florin/test2.txt');
     const testDir = await easyFileSystem.getDirectory('/home/florin');
 
-    console.log('testRead1', testRead1.toString());
-    console.log('testRead2', testRead2.toString());
-    console.log('testDir', await testDir.read());
+    console.log('testRead1:', testRead1.toString());
+    console.log('testRead2:', testRead2.toString());
+    console.log('testDir:', await testDir.read());
+
+    const homeDir = await easyFileSystem.getDirectory('/home');
+    console.log('homeDir:', await homeDir.read());
 
     const rootDir = await easyFileSystem.getDirectory('/');
-    console.log('rootDir', await rootDir.read());
+    console.log('rootDir:', await rootDir.read());
+
+    console.log('time:', new Date().getTime() - t0);
 }
 
 run().catch(console.error);

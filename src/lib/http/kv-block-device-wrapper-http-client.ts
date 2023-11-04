@@ -1,18 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { BlockDeviceEncryption } from '../block-device/kv-encryption';
+import { KvEncryption } from '../block-device/kv-encryption';
 import { KvBlockDevice } from '../block-device/types';
 import { INodeId } from '../inode/kv-inode';
 
-export class KvBlockDeviceHttp implements KvBlockDevice {
+export class KvBlockDeviceWrapperHttpClient implements KvBlockDevice {
     private readonly basePath: string;
     public readonly blockSize: number;
-    private readonly encryption?: BlockDeviceEncryption;
+    private readonly encryption?: KvEncryption;
 
     constructor(
         basePath: string,
         blockSize: number,
-        encryption?: BlockDeviceEncryption,
+        encryption?: KvEncryption,
     ) {
         this.basePath = basePath;
         this.blockSize = blockSize;

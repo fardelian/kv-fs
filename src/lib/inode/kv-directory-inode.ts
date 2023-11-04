@@ -17,8 +17,6 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
     public async init(): Promise<this> {
         await super.init();
 
-        this.entries = new Map();
-
         const buffer = await this.blockDevice.readBlock(this.id);
         const numEntries = buffer.readInt32BE(DirectoryINode.OFFSET_NUM_ENTRIES);
 
@@ -36,10 +34,14 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
     }
 
     public async read(): Promise<DirectoryEntriesList> {
+        this.checkInit();
+
         return new Map(this.entries);
     }
 
     public async write(newEntries: DirectoryEntriesList): Promise<void> {
+        this.checkInit();
+
         this.entries = newEntries;
         this.modificationTime = new Date();
 
@@ -64,28 +66,34 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
     }
 
     public async addEntry(name: string, inodeId: INodeId): Promise<void> {
+        this.checkInit();
+
         this.entries.set(name, inodeId);
         await this.write(this.entries);
     }
 
     public async removeEntry(name: string): Promise<void> {
+        this.checkInit();
+
         this.entries.delete(name);
         await this.write(this.entries);
     }
 
     public async getEntry(name: string): Promise<INodeId | undefined> {
+        this.checkInit();
+
         return this.entries.get(name);
     }
 
-    public static async createEmptyDirectory(blockDevice: KvBlockDevice, id: INodeId): Promise<DirectoryINode> {
+    public static async createEmptyDirectory(blockDevice: KvBlockDevice, blockId: INodeId): Promise<DirectoryINode> {
         const buffer = Buffer.alloc(blockDevice.blockSize);
         buffer.writeBigUInt64BE(BigInt(Date.now()), 0);
         buffer.writeBigUInt64BE(BigInt(Date.now()), 8);
         buffer.writeInt32BE(0, 16);
 
-        await blockDevice.writeBlock(id, buffer);
+        await blockDevice.writeBlock(blockId, buffer);
 
-        const directory = new DirectoryINode(blockDevice, id);
+        const directory = new DirectoryINode(blockDevice, blockId);
         await directory.init();
         await directory.write(new Map());
 

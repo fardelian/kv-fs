@@ -1,7 +1,7 @@
 import { KvBlockDevice } from '../block-device/types';
 import { Router } from 'express';
 
-export class KvBlockDeviceExpress {
+export class KvBlockDeviceWrapperHttpExpress {
     private readonly blockDevice: KvBlockDevice;
     private readonly router: Router;
 

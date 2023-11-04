@@ -1,8 +1,9 @@
 import { FileINode } from '../inode/kv-file-inode';
 import { KvFilesystem } from './kv-filesystem';
 import { DirectoryINode } from '../inode/kv-directory-inode';
+import { Init, KvError_FS_Exists } from '../types';
 
-export class KvEasyFilesystem {
+export class KvFilesystemEasy extends Init {
     private readonly filesystem: KvFilesystem;
     private readonly separator;
 
@@ -10,30 +11,37 @@ export class KvEasyFilesystem {
         filesystem: KvFilesystem,
         separator: string = '/',
     ) {
+        super();
         this.filesystem = filesystem;
         this.separator = separator;
     }
 
     public async init(): Promise<this> {
+        await super.init();
+
         return this;
     }
 
     // File operations
 
     public async createFile(pathName: string): Promise<FileINode> {
+        this.checkInit();
+
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 
         const directory = await this.getDirectory(path.join(this.separator));
 
         if (await directory.getEntry(fileName) !== undefined) {
-            throw new Error(`File with name "${fileName}" already exists`);
+            throw new KvError_FS_Exists(`File "${pathName}" already exists.`);
         }
 
         return await this.filesystem.createFile(fileName, directory);
     }
 
     public async getFile(pathName: string): Promise<FileINode> {
+        this.checkInit();
+
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 
@@ -42,6 +50,8 @@ export class KvEasyFilesystem {
     }
 
     public async unlink(pathName: string): Promise<void> {
+        this.checkInit();
+
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 
@@ -50,11 +60,15 @@ export class KvEasyFilesystem {
     }
 
     public async readFile(pathName: string): Promise<Buffer> {
+        this.checkInit();
+
         const file = await this.getFile(pathName);
         return await file.read();
     }
 
     public async writeFile(pathName: string, data: Buffer): Promise<void> {
+        this.checkInit();
+
         const file = await this.getFile(pathName);
         await file.write(data);
     }
@@ -62,6 +76,8 @@ export class KvEasyFilesystem {
     // Directory operations
 
     public async createDirectory(pathName: string, createPath: boolean = false): Promise<DirectoryINode> {
+        this.checkInit();
+
         const path = pathName.split(this.separator).slice(1);
         const directoryName = path.pop()!;
 
@@ -79,6 +95,8 @@ export class KvEasyFilesystem {
     }
 
     public async getDirectory(pathName: string): Promise<DirectoryINode> {
+        this.checkInit();
+
         const path = pathName.split(this.separator).slice(1);
         const directoryName = path.pop()!;
 
@@ -95,6 +113,8 @@ export class KvEasyFilesystem {
     }
 
     public async readDirectory(pathName: string): Promise<string[]> {
+        this.checkInit();
+
         const directory = await this.getDirectory(pathName);
         const directoryEntries = await directory.read();
 

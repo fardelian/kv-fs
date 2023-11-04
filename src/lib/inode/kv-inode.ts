@@ -1,8 +1,9 @@
 import { KvBlockDevice } from '../block-device/types';
+import { Init } from '../types';
 
 export type INodeId = number;
 
-export abstract class INode<DataType> {
+export abstract class INode<DataType> extends Init {
     public readonly id: INodeId;
     public blockDevice: KvBlockDevice;
 
@@ -10,11 +11,14 @@ export abstract class INode<DataType> {
     public modificationTime: Date = new Date(0);
 
     protected constructor(blockDevice: KvBlockDevice, id: INodeId) {
+        super();
         this.blockDevice = blockDevice;
         this.id = id;
     }
 
     public async init(): Promise<this> {
+        await super.init();
+
         const buffer = await this.blockDevice.readBlock(this.id);
 
         const creationTimeMs = buffer.readBigUInt64BE(0);

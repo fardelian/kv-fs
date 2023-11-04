@@ -1,14 +1,15 @@
 import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'crypto';
+import { KvError_Enc_Key } from '../types';
 
-export class BlockDeviceEncryption {
+export class KvEncryption {
     private static readonly KEY_LENGTH_BYTES = 32;
 
     private key: Buffer;
     private algorithm: string = 'aes-256-cbc';
 
     constructor(key: Buffer) {
-        if (key.length !== BlockDeviceEncryption.KEY_LENGTH_BYTES) {
-            throw new Error('Key must be 256 bits (32 bytes)');
+        if (key.length !== KvEncryption.KEY_LENGTH_BYTES) {
+            throw new KvError_Enc_Key(`Encryption key must be ${KvEncryption.KEY_LENGTH_BYTES * 8} bits (${KvEncryption.KEY_LENGTH_BYTES} bytes). Received ${key.length} bytes.`);
         }
 
         this.key = key;
@@ -42,7 +43,7 @@ export class BlockDeviceEncryption {
     }
 
     public static generateRandomKey(): Buffer {
-        return randomBytes(BlockDeviceEncryption.KEY_LENGTH_BYTES);
+        return randomBytes(KvEncryption.KEY_LENGTH_BYTES);
     }
 
     public static generateKeyFromPassword(
@@ -54,7 +55,7 @@ export class BlockDeviceEncryption {
             password,
             salt,
             iterations,
-            BlockDeviceEncryption.KEY_LENGTH_BYTES,
+            KvEncryption.KEY_LENGTH_BYTES,
             'sha512',
         );
     }

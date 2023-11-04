@@ -3,35 +3,44 @@ import { DirectoryINode } from '../inode/kv-directory-inode';
 import { FileINode } from '../inode/kv-file-inode';
 import { KvBlockDevice } from '../block-device/types';
 import { INodeId } from '../inode/kv-inode';
+import { Init, KvError_FS_NotFound } from '../types';
 
-export class KvFilesystem {
+export class KvFilesystem extends Init {
     private blockDevice: KvBlockDevice;
     private superBlock!: SuperBlock;
     private superBlockId: INodeId;
 
     constructor(blockDevice: KvBlockDevice, superBlockId: INodeId) {
+        super();
         this.blockDevice = blockDevice;
         this.superBlockId = superBlockId;
     }
 
     public async init(): Promise<this> {
+        await super.init();
+
         this.superBlock = new SuperBlock(this.blockDevice, this.superBlockId);
         await this.superBlock.init();
+
         return this;
     }
 
     // File operations
 
     public async createFile(name: string, directory: DirectoryINode): Promise<FileINode> {
+        this.checkInit();
+
         const file = await FileINode.createEmptyFile(this.blockDevice);
         await directory.addEntry(name, file.id);
         return file;
     }
 
     public async getFile(name: string, directory: DirectoryINode): Promise<FileINode> {
+        this.checkInit();
+
         const iNodeId = await directory.getEntry(name);
         if (iNodeId === undefined) {
-            throw new Error(`No file with the name "${name}" exists`);
+            throw new KvError_FS_NotFound(`File with the name "${name}" does not exist in given INode.`);
         }
 
         const fileINode = new FileINode(this.blockDevice, iNodeId);
@@ -39,9 +48,11 @@ export class KvFilesystem {
     }
 
     public async unlink(name: string, directory: DirectoryINode): Promise<void> {
+        this.checkInit();
+
         const inodeId = await directory.getEntry(name);
         if (inodeId === undefined) {
-            throw new Error(`No file with the name "${name}" exists`);
+            throw new KvError_FS_NotFound(`File with the name "${name}" does not exist in given INode.`);
         }
 
         await directory.removeEntry(name);
@@ -53,6 +64,8 @@ export class KvFilesystem {
     // Directory operations
 
     public async createDirectory(name: string, directory: DirectoryINode): Promise<DirectoryINode> {
+        this.checkInit();
+
         const id = await this.blockDevice.getNextINodeId();
         const newDirectory = await DirectoryINode.createEmptyDirectory(this.blockDevice, id);
         await directory.addEntry(name, newDirectory.id);
@@ -61,9 +74,11 @@ export class KvFilesystem {
     }
 
     public async getDirectory(name: string, parentDirectory: DirectoryINode): Promise<DirectoryINode> {
+        this.checkInit();
+
         const inodeId = await parentDirectory.getEntry(name);
         if (inodeId === undefined) {
-            throw new Error(`No directory with the name "${name}" exists`);
+            throw new KvError_FS_NotFound(`Directory with the name "${name}" does not exist in given INode.`);
         }
 
         const directory = new DirectoryINode(this.blockDevice, inodeId);
@@ -71,6 +86,8 @@ export class KvFilesystem {
     }
 
     public async getRootDirectory(): Promise<DirectoryINode> {
+        this.checkInit();
+
         const directory = new DirectoryINode(this.blockDevice, this.superBlock.rootDirectoryId);
         return await directory.init();
     }

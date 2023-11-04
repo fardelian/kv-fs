@@ -1,5 +1,6 @@
+# Development
 .idea
 node_modules
-package-lock.json
 
+# Production
 data

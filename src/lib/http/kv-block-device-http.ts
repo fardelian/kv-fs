@@ -1,28 +1,29 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { BlockDeviceEncryption } from './kv-encryption';
-import { KvBlockDevice } from './types';
+import { BlockDeviceEncryption } from '../block-device/kv-encryption';
+import { KvBlockDevice } from '../block-device/types';
+import { INodeId } from '../inode/kv-inode';
 
-export class KvBlockDeviceRest implements KvBlockDevice {
+export class KvBlockDeviceHttp implements KvBlockDevice {
     private readonly basePath: string;
     public readonly blockSize: number;
     private readonly encryption?: BlockDeviceEncryption;
 
     constructor(
-        baseUrl: string,
+        basePath: string,
         blockSize: number,
         encryption?: BlockDeviceEncryption,
     ) {
-        this.basePath = baseUrl;
+        this.basePath = basePath;
         this.blockSize = blockSize;
         this.encryption = encryption;
     }
 
-    private getBlockPath(blockId: number): string {
+    private getBlockPath(blockId: INodeId): string {
         return path.join(this.basePath, blockId.toString());
     }
 
-    public readBlock(blockId: number): Buffer {
+    public async readBlock(blockId: INodeId): Promise<Buffer> {
         const blockPath = this.getBlockPath(blockId);
 
         const rawData = fs.readFileSync(blockPath);
@@ -31,7 +32,7 @@ export class KvBlockDeviceRest implements KvBlockDevice {
             : rawData;
     }
 
-    public writeBlock(blockId: number, data: Buffer): void {
+    public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
         if (data.length > this.blockSize) {
             throw new Error(`Data size "${data.length}" is larger than block size "${this.blockSize}"`);
         }
@@ -46,16 +47,16 @@ export class KvBlockDeviceRest implements KvBlockDevice {
         fs.writeFileSync(blockPath, blockData);
     }
 
-    public freeBlock(blockId: number): void {
+    public async freeBlock(blockId: INodeId): Promise<void> {
         const blockPath = this.getBlockPath(blockId);
         fs.unlinkSync(blockPath);
     }
 
-    public existsBlock(blockId: number): boolean {
+    public async existsBlock(blockId: INodeId): Promise<boolean> {
         return fs.existsSync(this.getBlockPath(blockId));
     }
 
-    public getNextINodeId(): number {
+    public async getNextINodeId(): Promise<INodeId> {
         let blockId = 0;
         while (this.existsBlock(blockId)) blockId++;
         return blockId;

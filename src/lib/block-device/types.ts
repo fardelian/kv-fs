@@ -1,13 +1,15 @@
+import { INodeId } from '../inode/kv-inode';
+
 export interface KvBlockDevice {
     blockSize: number;
 
-    readBlock(blockId: number): Buffer;
+    readBlock(blockId: INodeId): Promise<Buffer>;
 
-    writeBlock(blockId: number, data: Buffer): void;
+    writeBlock(blockId: INodeId, data: Buffer): Promise<void>;
 
-    freeBlock(blockId: number): void;
+    freeBlock(blockId: INodeId): Promise<void>;
 
-    existsBlock(blockId: number): boolean;
+    existsBlock(blockId: INodeId): Promise<boolean>;
 
-    getNextINodeId(): number;
+    getNextINodeId(): Promise<INodeId>;
 }

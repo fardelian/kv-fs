@@ -1,47 +1,45 @@
-import { INode } from './kv-inode';
+import { INode, INodeId } from './kv-inode';
 import { KvBlockDevice } from '../block-device/types';
 
-export type INodeType = 'directory' | 'file';
-export const INodeTypeMap: INodeType[] = ['directory', 'file'];
-
-type DirectoryEntry = { id: number, type: number };
-type DirectoryEntriesList = Map<string, number>;
+type DirectoryEntriesList = Map<string, INodeId>;
 
 export class DirectoryINode extends INode<DirectoryEntriesList> {
     public static readonly MAX_NAME_LENGTH = 255;
     public static readonly OFFSET_NUM_ENTRIES = 16;
     public static readonly OFFSET_ENTRIES_PREFIX = 20;
 
-    private entries: DirectoryEntriesList;
+    private entries: DirectoryEntriesList = new Map();
 
-    constructor(blockDevice: KvBlockDevice, id: number) {
+    constructor(blockDevice: KvBlockDevice, id: INodeId) {
         super(blockDevice, id);
+    }
+
+    public async init(): Promise<this> {
+        await super.init();
 
         this.entries = new Map();
 
-        const buffer = this.blockDevice.readBlock(this.id);
+        const buffer = await this.blockDevice.readBlock(this.id);
         const numEntries = buffer.readInt32BE(DirectoryINode.OFFSET_NUM_ENTRIES);
 
         for (let i = 0; i < numEntries; i++) {
-            const nameLength = buffer.readInt8(
-                DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268,
-            );
+            const nameOffset = DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268 + 1;
+            const nameLength = buffer.readInt8(DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268);
 
-            const OFFSET_NAME = DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268 + 1;
-
-            const name = buffer.toString('utf8', OFFSET_NAME, OFFSET_NAME + nameLength);
-
-            const inodeId = buffer.readInt32BE(OFFSET_NAME + DirectoryINode.MAX_NAME_LENGTH);
+            const name = buffer.toString('utf8', nameOffset, nameOffset + nameLength);
+            const inodeId = buffer.readInt32BE(nameOffset + DirectoryINode.MAX_NAME_LENGTH);
 
             this.entries.set(name, inodeId);
         }
+
+        return this;
     }
 
-    public read(): DirectoryEntriesList {
+    public async read(): Promise<DirectoryEntriesList> {
         return new Map(this.entries);
     }
 
-    public write(newEntries: DirectoryEntriesList): void {
+    public async write(newEntries: DirectoryEntriesList): Promise<void> {
         this.entries = newEntries;
         this.modificationTime = new Date();
 
@@ -62,33 +60,34 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
             i++;
         }
 
-        this.blockDevice.writeBlock(this.id, buffer);
+        await this.blockDevice.writeBlock(this.id, buffer);
     }
 
-    public addEntry(name: string, inodeId: number): void {
+    public async addEntry(name: string, inodeId: INodeId): Promise<void> {
         this.entries.set(name, inodeId);
-        this.write(this.entries);
+        await this.write(this.entries);
     }
 
-    public removeEntry(name: string): void {
+    public async removeEntry(name: string): Promise<void> {
         this.entries.delete(name);
-        this.write(this.entries);
+        await this.write(this.entries);
     }
 
-    public getEntry(name: string): number | undefined {
+    public async getEntry(name: string): Promise<INodeId | undefined> {
         return this.entries.get(name);
     }
 
-    public static createEmptyDirectory(blockDevice: KvBlockDevice, id: number): DirectoryINode {
+    public static async createEmptyDirectory(blockDevice: KvBlockDevice, id: INodeId): Promise<DirectoryINode> {
         const buffer = Buffer.alloc(blockDevice.blockSize);
         buffer.writeBigUInt64BE(BigInt(Date.now()), 0);
         buffer.writeBigUInt64BE(BigInt(Date.now()), 8);
         buffer.writeInt32BE(0, 16);
 
-        blockDevice.writeBlock(id, buffer);
+        await blockDevice.writeBlock(id, buffer);
 
         const directory = new DirectoryINode(blockDevice, id);
-        directory.write(new Map());
+        await directory.init();
+        await directory.write(new Map());
 
         return directory;
     }

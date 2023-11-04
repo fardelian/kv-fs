@@ -1,33 +1,38 @@
 import { KvBlockDevice } from '../block-device/types';
+import { INodeId } from '../inode/kv-inode';
 
 export class SuperBlock {
     private blockDevice: KvBlockDevice;
-    private superBlockId: number;
+    private superBlockId: INodeId;
 
-    public totalBlocks: number;
-    public blockSize: number;
-    public totalInodes: number;
-    public rootDirectoryId: number;
+    public totalBlocks: number = 0;
+    public blockSize: number = 0;
+    public totalInodes: number = 0;
+    public rootDirectoryId: INodeId = 0;
 
-    constructor(blockDevice: KvBlockDevice, superBlockId: number) {
+    constructor(blockDevice: KvBlockDevice, superBlockId: INodeId) {
         this.blockDevice = blockDevice;
         this.superBlockId = superBlockId;
+    }
 
-        const buffer = this.blockDevice.readBlock(superBlockId);
+    public async init(): Promise<SuperBlock> {
+        const buffer = await this.blockDevice.readBlock(this.superBlockId);
 
         this.totalBlocks = buffer.readInt32BE(0);
         this.blockSize = buffer.readInt32BE(4);
         this.totalInodes = buffer.readInt32BE(8);
         this.rootDirectoryId = buffer.readInt32BE(12);
+
+        return this;
     }
 
-    public static createSuperBlock(
-        id: number,
+    public static async createSuperBlock(
+        id: INodeId,
         blockDevice: KvBlockDevice,
         totalBlocks: number,
         totalInodes: number,
-        rootDirectory: number,
-    ): SuperBlock {
+        rootDirectory: INodeId,
+    ): Promise<SuperBlock> {
         const buffer = Buffer.alloc(blockDevice.blockSize);
 
         buffer.writeInt32BE(totalBlocks, 0);
@@ -35,8 +40,9 @@ export class SuperBlock {
         buffer.writeInt32BE(totalInodes, 8);
         buffer.writeInt32BE(rootDirectory, 12);
 
-        blockDevice.writeBlock(id, buffer);
+        await blockDevice.writeBlock(id, buffer);
 
-        return new SuperBlock(blockDevice, id);
+        const superBlock = new SuperBlock(blockDevice, id);
+        return await superBlock.init();
     }
 }

@@ -1,25 +1,32 @@
 import { KvBlockDevice } from '../block-device/types';
 
+export type INodeId = number;
+
 export abstract class INode<DataType> {
-    public readonly id: number;
-    public readonly creationTime: Date;
-    public modificationTime: Date;
-    public readonly blockDevice: KvBlockDevice;
+    public readonly id: INodeId;
+    public blockDevice: KvBlockDevice;
 
-    protected constructor(blockDevice: KvBlockDevice, id: number) {
-        this.id = id;
+    public creationTime: Date = new Date(0);
+    public modificationTime: Date = new Date(0);
+
+    protected constructor(blockDevice: KvBlockDevice, id: INodeId) {
         this.blockDevice = blockDevice;
+        this.id = id;
+    }
 
-        const buffer = this.blockDevice.readBlock(this.id);
+    public async init(): Promise<this> {
+        const buffer = await this.blockDevice.readBlock(this.id);
 
         const creationTimeMs = buffer.readBigUInt64BE(0);
         const modificationTimeMs = buffer.readBigUInt64BE(8);
 
         this.creationTime = new Date(Number(creationTimeMs));
         this.modificationTime = new Date(Number(modificationTimeMs));
+
+        return this;
     }
 
-    public abstract read(): DataType;
+    protected abstract read(): Promise<DataType>;
 
-    public abstract write(data: DataType): void;
+    protected abstract write(data: DataType): Promise<void>;
 }

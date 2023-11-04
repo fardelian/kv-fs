@@ -2,84 +2,100 @@ import { SuperBlock } from './kv-super-block';
 import { DirectoryINode } from '../inode/kv-directory-inode';
 import { FileINode } from '../inode/kv-file-inode';
 import { KvBlockDevice } from '../block-device/types';
+import { INodeId } from '../inode/kv-inode';
 
 export class KvFilesystem {
-    private readonly blockDevice: KvBlockDevice;
-    private readonly superBlock: SuperBlock;
+    private blockDevice: KvBlockDevice;
+    private superBlock!: SuperBlock;
+    private superBlockId: INodeId;
 
-    constructor(blockDevice: KvBlockDevice, superBlockId: number) {
+    constructor(blockDevice: KvBlockDevice, superBlockId: INodeId) {
         this.blockDevice = blockDevice;
-        this.superBlock = new SuperBlock(blockDevice, superBlockId);
+        this.superBlockId = superBlockId;
+    }
+
+    public async init(): Promise<this> {
+        this.superBlock = new SuperBlock(this.blockDevice, this.superBlockId);
+        await this.superBlock.init();
+        return this;
     }
 
     // File operations
 
-    public createFile(name: string, directory: DirectoryINode): FileINode {
-        const file = FileINode.createEmptyFile(this.blockDevice);
-        directory.addEntry(name, file.id);
+    public async createFile(name: string, directory: DirectoryINode): Promise<FileINode> {
+        const file = await FileINode.createEmptyFile(this.blockDevice);
+        await directory.addEntry(name, file.id);
         return file;
     }
 
-    public getFile(name: string, directory: DirectoryINode): FileINode {
-        const inodeId = directory.getEntry(name);
-        if (inodeId === undefined) {
+    public async getFile(name: string, directory: DirectoryINode): Promise<FileINode> {
+        const iNodeId = await directory.getEntry(name);
+        if (iNodeId === undefined) {
             throw new Error(`No file with the name "${name}" exists`);
         }
 
-        return new FileINode(this.blockDevice, inodeId);
+        const fileINode = new FileINode(this.blockDevice, iNodeId);
+        return await fileINode.init();
     }
 
-    public unlink(name: string, directory: DirectoryINode): void {
-        const inodeId = directory.getEntry(name);
+    public async unlink(name: string, directory: DirectoryINode): Promise<void> {
+        const inodeId = await directory.getEntry(name);
         if (inodeId === undefined) {
             throw new Error(`No file with the name "${name}" exists`);
         }
 
-        directory.removeEntry(name);
+        await directory.removeEntry(name);
         const file = new FileINode(this.blockDevice, inodeId);
-        file.unlink();
+        await file.init();
+        await file.unlink();
     }
 
     // Directory operations
 
-    public createDirectory(name: string, directory: DirectoryINode): DirectoryINode {
-        const id = this.blockDevice.getNextINodeId();
-        const newDirectory = DirectoryINode.createEmptyDirectory(this.blockDevice, id);
-        directory.addEntry(name, newDirectory.id);
+    public async createDirectory(name: string, directory: DirectoryINode): Promise<DirectoryINode> {
+        const id = await this.blockDevice.getNextINodeId();
+        const newDirectory = await DirectoryINode.createEmptyDirectory(this.blockDevice, id);
+        await directory.addEntry(name, newDirectory.id);
 
         return newDirectory;
     }
 
-    public getDirectory(name: string, directory: DirectoryINode): DirectoryINode {
-        const inodeId = directory.getEntry(name);
+    public async getDirectory(name: string, parentDirectory: DirectoryINode): Promise<DirectoryINode> {
+        const inodeId = await parentDirectory.getEntry(name);
         if (inodeId === undefined) {
             throw new Error(`No directory with the name "${name}" exists`);
         }
 
-        return new DirectoryINode(this.blockDevice, inodeId);
+        const directory = new DirectoryINode(this.blockDevice, inodeId);
+        return await directory.init();
     }
 
-    public getRootDirectory(): DirectoryINode {
-        return new DirectoryINode(this.blockDevice, this.superBlock.rootDirectoryId);
+    public async getRootDirectory(): Promise<DirectoryINode> {
+        const directory = new DirectoryINode(this.blockDevice, this.superBlock.rootDirectoryId);
+        return await directory.init();
     }
 
     // Filesystem operations
 
-    public static format(
+    public static async format(
         blockDevice: KvBlockDevice,
         totalBlocks: number,
         totalINodes: number,
-        rootDirectoryId: number = 1,
-        superBlockId: number = 0,
-    ): KvFilesystem {
+        rootDirectoryId: INodeId = 1,
+        superBlockId: INodeId = 0,
+    ): Promise<KvFilesystem> {
         let blockId = 0;
-        while (blockDevice.existsBlock(blockId)) {
-            blockDevice.freeBlock(blockId++);
+        while (await blockDevice.existsBlock(blockId)) {
+            await blockDevice.freeBlock(blockId++);
         }
 
-        SuperBlock.createSuperBlock(superBlockId, blockDevice, totalBlocks, totalINodes, rootDirectoryId);
-        DirectoryINode.createEmptyDirectory(blockDevice, rootDirectoryId);
+        await SuperBlock.createSuperBlock(superBlockId, blockDevice, totalBlocks, totalINodes, rootDirectoryId);
+        await DirectoryINode.createEmptyDirectory(blockDevice, rootDirectoryId);
 
-        return new KvFilesystem(blockDevice, superBlockId);
+        // TODO Return blockDevice and superBlockId instead of filesystem!
+        // The user of format() should initialize their own filesystem
+
+        const fs = new KvFilesystem(blockDevice, superBlockId);
+        return await fs.init();
     }
 }

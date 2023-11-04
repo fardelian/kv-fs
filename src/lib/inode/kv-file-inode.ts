@@ -1,21 +1,24 @@
-import { INode } from './kv-inode';
+import { INode, INodeId } from './kv-inode';
 import { KvBlockDevice } from '../block-device/types';
 
 export class FileINode extends INode<Buffer> {
-    public size: number;
-    private readonly dataBlockIds: number[];
+    public size: number = 0;
 
-    constructor(blockDevice: KvBlockDevice, id: number) {
+    private dataBlockIds: INodeId[] = [];
+
+    constructor(blockDevice: KvBlockDevice, id: INodeId) {
         super(blockDevice, id);
+    }
 
-        const buffer = this.blockDevice.readBlock(this.id);
+    public async init(): Promise<this> {
+        const buffer = await this.blockDevice.readBlock(this.id);
 
         this.size = buffer.readInt32BE(16);
 
         this.dataBlockIds = [];
 
         let sizeFromBlocks = 0;
-        let i=0;
+        let i = 0;
         while (sizeFromBlocks < this.size) {
             this.dataBlockIds.push(buffer.readInt32BE(20 + i * 4));
             sizeFromBlocks += this.blockDevice.blockSize;
@@ -24,39 +27,41 @@ export class FileINode extends INode<Buffer> {
         // for (let i = 0; i < (this.blockDevice.blockSize - 20) / 4; i++) {
         //     this.dataBlockIds.push(buffer.readInt32BE(20 + i * 4));
         // }
+
+        return this;
     }
 
-    public read(): Buffer {
+    public async read(): Promise<Buffer> {
         let data = Buffer.alloc(this.size);
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
-            const blockData = this.blockDevice.readBlock(this.dataBlockIds[i]);
+            const blockData = await this.blockDevice.readBlock(this.dataBlockIds[i]);
             blockData.copy(data, i * this.blockDevice.blockSize);
         }
 
         return data;
     }
 
-    public write(data: Buffer): void {
+    public async write(data: Buffer): Promise<void> {
         const requiredBlocks = Math.ceil(data.length / this.blockDevice.blockSize);
 
         // If more blocks are required, allocate them
 
         while (this.dataBlockIds.length < requiredBlocks) {
-            this.dataBlockIds.push(this.blockDevice.getNextINodeId());
+            this.dataBlockIds.push(await this.blockDevice.getNextINodeId());
         }
 
         // If less blocks are required, free them
 
         while (this.dataBlockIds.length > requiredBlocks) {
-            this.blockDevice.freeBlock(this.dataBlockIds.pop()!);
+            await this.blockDevice.freeBlock(this.dataBlockIds.pop()!);
         }
 
         // Write the data to the blocks
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
             const blockData = data.subarray(i * this.blockDevice.blockSize, (i + 1) * this.blockDevice.blockSize);
-            this.blockDevice.writeBlock(this.dataBlockIds[i], blockData);
+            await this.blockDevice.writeBlock(this.dataBlockIds[i], blockData);
         }
 
         // Update the metadata
@@ -73,22 +78,22 @@ export class FileINode extends INode<Buffer> {
             buffer.writeInt32BE(this.dataBlockIds[i], 20 + i * 4);
         }
 
-        this.blockDevice.writeBlock(this.id, buffer);
+        await this.blockDevice.writeBlock(this.id, buffer);
     }
 
-    public unlink(): void {
+    public async unlink(): Promise<void> {
         for (let i = 0; i < this.dataBlockIds.length; i++) {
-            this.blockDevice.freeBlock(this.dataBlockIds[i]);
+            await this.blockDevice.freeBlock(this.dataBlockIds[i]);
         }
 
-        this.blockDevice.freeBlock(this.id);
+        await this.blockDevice.freeBlock(this.id);
 
         this.size = 0;
         this.modificationTime = new Date();
     }
 
-    public static createEmptyFile(blockDevice: KvBlockDevice): FileINode {
-        const id = blockDevice.getNextINodeId();
+    public static async createEmptyFile(blockDevice: KvBlockDevice): Promise<FileINode> {
+        const id = await blockDevice.getNextINodeId();
         const creationTime = new Date();
         const modificationTime = new Date();
 
@@ -101,8 +106,9 @@ export class FileINode extends INode<Buffer> {
             buffer.writeInt32BE(0, 20 + i * 4);
         }
 
-        blockDevice.writeBlock(id, buffer);
+        await blockDevice.writeBlock(id, buffer);
 
-        return new FileINode(blockDevice, id);
+        const fileINode = new FileINode(blockDevice, id);
+        return await fileINode.init();
     }
 }

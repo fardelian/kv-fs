@@ -8,43 +8,54 @@ const TOTAL_NODES = 1000;
 
 const SUPER_BLOCK_ID = 0;
 
+async function run() {
+
 // const password = FileSystemEncryption.keyFromPassword(
 //     'password',
 //     'salt',
 //     100000,
 // );
 
-const blockDevice = new KvBlockDeviceFs(
-    `${__dirname}/../data`,
-    BLOCK_SIZE,
-    // new FileSystemEncryption(password),
-);
+    const blockDevice = new KvBlockDeviceFs(
+        `${__dirname}/../data`,
+        BLOCK_SIZE,
+        // new FileSystemEncryption(password),
+    );
+    await blockDevice.init();
 
 // Create file system
 
-KvFilesystem.format(blockDevice,TOTAL_BLOCKS,TOTAL_NODES);
+    await KvFilesystem.format(blockDevice, TOTAL_BLOCKS, TOTAL_NODES);
 
-const fileSystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
-const easyFileSystem = new KvEasyFilesystem(fileSystem, '/');
+    const fileSystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
+    await fileSystem.init();
+    const easyFileSystem = new KvEasyFilesystem(fileSystem, '/');
+    await easyFileSystem.init();
 
 // Create test files
 
-easyFileSystem.createDirectory('/home/florin', true);
+    await easyFileSystem.createDirectory('/home/florin', true);
 
-const testWrite1 = '/home/florin/test1.txt';
-easyFileSystem.createFile(testWrite1).write(Buffer.from('hello world'));
+    const testWrite1 = '/home/florin/test1.txt';
+    const testFile1 = await easyFileSystem.createFile(testWrite1);
+    await testFile1.write(Buffer.from('hello world'));
 
-const testWrite2 = '/home/florin/test2.txt';
-easyFileSystem.createFile(testWrite2).write(Buffer.from('and hello again'));
+    const testWrite2 = '/home/florin/test2.txt';
+    const testFile2 = await easyFileSystem.createFile(testWrite2);
+    await testFile2.write(Buffer.from('and hello again'));
 
 // Read test files
 
-const testRead1 = easyFileSystem.readFile('/home/florin/test1.txt');
-const testRead2 = easyFileSystem.readFile('/home/florin/test2.txt');
-const testDir = easyFileSystem.getDirectory('/home/florin');
+    const testRead1 = await easyFileSystem.readFile('/home/florin/test1.txt');
+    const testRead2 = await easyFileSystem.readFile('/home/florin/test2.txt');
+    const testDir = await easyFileSystem.getDirectory('/home/florin');
 
-console.log(testRead1.toString());
-console.log(testRead2.toString());
-console.log(JSON.stringify(
-    [...testDir.read()],
-));
+    console.log('testRead1', testRead1.toString());
+    console.log('testRead2', testRead2.toString());
+    console.log('testDir', await testDir.read());
+
+    const rootDir = await easyFileSystem.getDirectory('/');
+    console.log('rootDir', await rootDir.read());
+}
+
+run().catch(console.error);

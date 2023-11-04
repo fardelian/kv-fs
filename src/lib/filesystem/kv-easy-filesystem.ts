@@ -14,81 +14,90 @@ export class KvEasyFilesystem {
         this.separator = separator;
     }
 
+    public async init(): Promise<this> {
+        return this;
+    }
+
     // File operations
 
-    public createFile(pathName: string): FileINode {
+    public async createFile(pathName: string): Promise<FileINode> {
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 
-        const directory = this.getDirectory(path.join(this.separator));
+        const directory = await this.getDirectory(path.join(this.separator));
 
-        if (directory.getEntry(fileName) !== undefined) {
+        if (await directory.getEntry(fileName) !== undefined) {
             throw new Error(`File with name "${fileName}" already exists`);
         }
 
-        return this.filesystem.createFile(fileName, directory);
+        return await this.filesystem.createFile(fileName, directory);
     }
 
-    public getFile(pathName: string): FileINode {
+    public async getFile(pathName: string): Promise<FileINode> {
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 
-        const directory = this.getDirectory(path.join(this.separator));
-        return this.filesystem.getFile(fileName, directory);
+        const directory = await this.getDirectory(path.join(this.separator));
+        return await this.filesystem.getFile(fileName, directory);
     }
 
-    public unlink(pathName: string): void {
+    public async unlink(pathName: string): Promise<void> {
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 
-        const directory = this.getDirectory(path.join(this.separator));
-        this.filesystem.unlink(fileName, directory);
+        const directory = await this.getDirectory(path.join(this.separator));
+        await this.filesystem.unlink(fileName, directory);
     }
 
-    public readFile(pathName: string): Buffer {
-        return this.getFile(pathName).read();
+    public async readFile(pathName: string): Promise<Buffer> {
+        const file = await this.getFile(pathName);
+        return await file.read();
     }
 
-    public writeFile(pathName: string, data: Buffer): void {
-        this.getFile(pathName).write(data);
+    public async writeFile(pathName: string, data: Buffer): Promise<void> {
+        const file = await this.getFile(pathName);
+        await file.write(data);
     }
 
     // Directory operations
 
-    public createDirectory(pathName: string, createPath: boolean = false): DirectoryINode {
+    public async createDirectory(pathName: string, createPath: boolean = false): Promise<DirectoryINode> {
         const path = pathName.split(this.separator).slice(1);
         const directoryName = path.pop()!;
 
-        let directory = this.filesystem.getRootDirectory();
+        let directory = await this.filesystem.getRootDirectory();
         for (const name of path) {
             try {
-                directory = this.filesystem.getDirectory(name, directory);
+                directory = await this.filesystem.getDirectory(name, directory);
             } catch (err) {
                 if (!createPath) throw err;
-                directory = this.filesystem.createDirectory(name, directory);
+                directory = await this.filesystem.createDirectory(name, directory);
             }
         }
 
-        return this.filesystem.createDirectory(directoryName, directory);
+        return await this.filesystem.createDirectory(directoryName, directory);
     }
 
-    public getDirectory(pathName: string): DirectoryINode {
+    public async getDirectory(pathName: string): Promise<DirectoryINode> {
         const path = pathName.split(this.separator).slice(1);
         const directoryName = path.pop()!;
 
-        let directory = this.filesystem.getRootDirectory();
+        let directory = await this.filesystem.getRootDirectory();
         if (directoryName === '') {
             return directory;
         }
 
         for (const name of path) {
-            directory = this.filesystem.getDirectory(name, directory);
+            directory = await this.filesystem.getDirectory(name, directory);
         }
 
-        return this.filesystem.getDirectory(directoryName, directory);
+        return await this.filesystem.getDirectory(directoryName, directory);
     }
 
-    public readDirectory(pathName: string): string[] {
-        return Array.from(this.getDirectory(pathName).read().keys());
+    public async readDirectory(pathName: string): Promise<string[]> {
+        const directory = await this.getDirectory(pathName);
+        const directoryEntries = await directory.read();
+
+        return Array.from(directoryEntries.keys());
     }
 }

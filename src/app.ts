@@ -1,6 +1,7 @@
 import { KvFilesystem } from './lib/filesystem/kv-filesystem';
 import { KvFilesystemEasy } from './lib/filesystem/kv-filesystem-easy';
 import { KvBlockDeviceFs } from './lib/block-device/kv-block-device-fs';
+import { KvEncryptionNone } from './lib/encryption/kv-encryption-none';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -12,16 +13,17 @@ async function run() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const t0 = new Date().getTime();
 
-// const password = FileSystemEncryption.keyFromPassword(
-//     'password',
-//     'salt',
-//     100000,
-// );
+    // const password = FileSystemEncryption.keyFromPassword(
+    //     'password',
+    //     'salt',
+    //     100000,
+    // );
+    const encryption=new KvEncryptionNone();
 
     const blockDevice = new KvBlockDeviceFs(
         `${__dirname}/../data`,
         BLOCK_SIZE,
-        // new FileSystemEncryption(password),
+        encryption,
     );
     await blockDevice.init();
 

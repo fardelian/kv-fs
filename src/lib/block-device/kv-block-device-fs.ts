@@ -1,22 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { KvEncryption } from './kv-encryption';
 import { KvBlockDevice } from './types';
 import { INodeId } from '../inode/kv-inode';
 import { Init, KvError_BD_Overflow } from '../types';
+import { KvEncryption } from '../encryption/types';
 
 export class KvBlockDeviceFs extends Init implements KvBlockDevice {
-    private readonly basePath: string;
     public readonly blockSize: number;
-    private readonly encryption?: KvEncryption;
+
+    private readonly localBasePath: string;
+    private readonly encryption: KvEncryption;
 
     constructor(
-        basePath: string,
+        localFsPath: string,
         blockSize: number,
-        encryption?: KvEncryption,
+        encryption: KvEncryption,
     ) {
         super();
-        this.basePath = basePath;
+        this.localBasePath = localFsPath;
         this.blockSize = blockSize;
         this.encryption = encryption;
     }
@@ -30,7 +31,7 @@ export class KvBlockDeviceFs extends Init implements KvBlockDevice {
     private getBlockPath(blockId: INodeId): string {
         this.checkInit();
 
-        return path.join(this.basePath, blockId.toString()) + '.txt';
+        return path.join(this.localBasePath, blockId.toString()) + '.txt';
     }
 
     public async readBlock(blockId: INodeId): Promise<Buffer> {
@@ -39,9 +40,7 @@ export class KvBlockDeviceFs extends Init implements KvBlockDevice {
         const blockPath = this.getBlockPath(blockId);
 
         const rawData = fs.readFileSync(blockPath);
-        return this.encryption
-            ? this.encryption.decrypt(rawData)
-            : rawData;
+        return this.encryption.decrypt(rawData);
     }
 
     public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
@@ -53,7 +52,7 @@ export class KvBlockDeviceFs extends Init implements KvBlockDevice {
 
         const blockPath = this.getBlockPath(blockId);
 
-        const rawData = this.encryption ? this.encryption.encrypt(data) : data;
+        const rawData = this.encryption.encrypt(data);
         const blockData = Buffer.alloc(this.blockSize);
         rawData.copy(blockData);
         fs.writeFileSync(blockPath, blockData);

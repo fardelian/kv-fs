@@ -49,16 +49,6 @@ export class KvFilesystemEasy extends Init {
         return await this.filesystem.getFile(fileName, directory);
     }
 
-    public async unlink(pathName: string): Promise<void> {
-        this.checkInit();
-
-        const path = pathName.split(this.separator);
-        const fileName = path.pop()!;
-
-        const directory = await this.getDirectory(path.join(this.separator));
-        await this.filesystem.unlink(fileName, directory);
-    }
-
     public async readFile(pathName: string): Promise<Buffer> {
         this.checkInit();
 
@@ -119,5 +109,17 @@ export class KvFilesystemEasy extends Init {
         const directoryEntries = await directory.read();
 
         return Array.from(directoryEntries.keys());
+    }
+
+    // Common operations
+
+    public async unlink(pathName: string): Promise<void> {
+        this.checkInit();
+
+        const path = pathName.split(this.separator);
+        const fileName = path.pop()!;
+
+        const directory = await this.getDirectory(path.join(this.separator));
+        await this.filesystem.unlink(fileName, directory);
     }
 }

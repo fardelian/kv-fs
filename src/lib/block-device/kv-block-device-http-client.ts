@@ -1,26 +1,27 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { KvEncryption } from '../block-device/kv-encryption';
-import { KvBlockDevice } from '../block-device/types';
+import { KvEncryptionKey } from '../encryption/kv-encryption-key';
+import { KvBlockDevice } from './types';
 import { INodeId } from '../inode/kv-inode';
 
-export class KvBlockDeviceWrapperHttpClient implements KvBlockDevice {
-    private readonly basePath: string;
+export class KvBlockDeviceHttpClient implements KvBlockDevice {
     public readonly blockSize: number;
-    private readonly encryption?: KvEncryption;
+
+    private readonly baseUrl: string;
+    private readonly encryption: KvEncryptionKey;
 
     constructor(
-        basePath: string,
+        baseUrl: string,
         blockSize: number,
-        encryption?: KvEncryption,
+        encryption: KvEncryptionKey,
     ) {
-        this.basePath = basePath;
+        this.baseUrl = baseUrl;
         this.blockSize = blockSize;
         this.encryption = encryption;
     }
 
     private getBlockPath(blockId: INodeId): string {
-        return path.join(this.basePath, blockId.toString());
+        return path.join(this.baseUrl, blockId.toString());
     }
 
     public async readBlock(blockId: INodeId): Promise<Buffer> {

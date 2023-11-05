@@ -1,5 +1,5 @@
-import { KvBlockDevice } from '../block-device/types';
-import { INodeId } from '../inode/kv-inode';
+import { KvBlockDevice } from '../block-devices';
+import { INodeId } from '../inode';
 import { Init } from '../types';
 
 export class SuperBlock extends Init {
@@ -37,10 +37,10 @@ export class SuperBlock extends Init {
         totalInodes: number,
         rootDirectory: INodeId,
     ): Promise<SuperBlock> {
-        const buffer = Buffer.alloc(blockDevice.blockSize);
+        const buffer = Buffer.alloc(blockDevice.getBlockSize());
 
         buffer.writeInt32BE(totalBlocks, 0);
-        buffer.writeInt32BE(blockDevice.blockSize, 4);
+        buffer.writeInt32BE(blockDevice.getBlockSize(), 4);
         buffer.writeInt32BE(totalInodes, 8);
         buffer.writeInt32BE(rootDirectory, 12);
 

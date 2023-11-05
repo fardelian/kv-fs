@@ -3,20 +3,17 @@ import * as path from 'path';
 import { KvBlockDevice } from './types';
 import { INodeId } from '../inode/kv-inode';
 import { KvError_BD_Overflow } from '../types';
-import { KvEncryption } from '../encryption/types';
 
+/** KvBlockDevice which uses the local file system. */
 export class KvBlockDeviceFs extends KvBlockDevice {
-    private readonly localBasePath: string;
-    private readonly encryption: KvEncryption;
+    private readonly localFsBasePath: string;
 
     constructor(
         blockSize: number,
-        localFsPath: string,
-        encryption: KvEncryption,
+        localFsBasePath: string,
     ) {
         super(blockSize);
-        this.localBasePath = localFsPath;
-        this.encryption = encryption;
+        this.localFsBasePath = localFsBasePath;
     }
 
     public async init(): Promise<this> {
@@ -28,7 +25,7 @@ export class KvBlockDeviceFs extends KvBlockDevice {
     private getBlockPath(blockId: INodeId): string {
         this.ensureInit();
 
-        return path.join(this.localBasePath, blockId.toString()) + '.txt';
+        return path.join(this.localFsBasePath, blockId.toString()) + '.txt';
     }
 
     public async readBlock(blockId: INodeId): Promise<Buffer> {
@@ -36,24 +33,22 @@ export class KvBlockDeviceFs extends KvBlockDevice {
 
         const blockPath = this.getBlockPath(blockId);
 
-        const encryptedData = fs.readFileSync(blockPath);
-        return this.encryption.decrypt(encryptedData);
+        return fs.readFileSync(blockPath);
     }
 
     public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
         this.ensureInit();
 
-        if (data.length > this.blockSize) {
-            throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.blockSize}" bytes.`);
+        if (data.length > this.getBlockSize()) {
+            throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.getBlockSize()}" bytes.`);
         }
 
         const blockPath = this.getBlockPath(blockId);
 
-        const blockData = Buffer.alloc(this.blockSize);
+        const blockData = Buffer.alloc(this.getBlockSize());
         data.copy(blockData);
-        const encryptedData = this.encryption.encrypt(blockData);
 
-        fs.writeFileSync(blockPath, encryptedData);
+        fs.writeFileSync(blockPath, blockData);
     }
 
     public async freeBlock(blockId: INodeId): Promise<void> {

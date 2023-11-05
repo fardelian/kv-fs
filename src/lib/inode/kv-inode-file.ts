@@ -1,7 +1,7 @@
 import { INode, INodeId } from './kv-inode';
-import { KvBlockDevice } from '../block-device/types';
+import { KvBlockDevice } from '../block-devices';
 
-export class FileINode extends INode<Buffer> {
+export class KvINodeFile extends INode<Buffer> {
     public size: number = 0;
 
     private dataBlockIds: INodeId[] = [];
@@ -23,10 +23,10 @@ export class FileINode extends INode<Buffer> {
         let i = 0;
         while (sizeFromBlocks < this.size) {
             this.dataBlockIds.push(buffer.readInt32BE(20 + i * 4));
-            sizeFromBlocks += this.blockDevice.blockSize;
+            sizeFromBlocks += this.blockDevice.getBlockSize();
             i++;
         }
-        // for (let i = 0; i < (this.blockDevice.blockSize - 20) / 4; i++) {
+        // for (let i = 0; i < (this.blockDevice.getBlockSize() - 20) / 4; i++) {
         //     this.dataBlockIds.push(buffer.readInt32BE(20 + i * 4));
         // }
 
@@ -40,7 +40,7 @@ export class FileINode extends INode<Buffer> {
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
             const blockData = await this.blockDevice.readBlock(this.dataBlockIds[i]);
-            blockData.copy(data, i * this.blockDevice.blockSize);
+            blockData.copy(data, i * this.blockDevice.getBlockSize());
         }
 
         return data;
@@ -49,7 +49,7 @@ export class FileINode extends INode<Buffer> {
     public async write(data: Buffer): Promise<void> {
         this.ensureInit();
 
-        const requiredBlocks = Math.ceil(data.length / this.blockDevice.blockSize);
+        const requiredBlocks = Math.ceil(data.length / this.blockDevice.getBlockSize());
 
         // If more blocks are required, allocate them
 
@@ -67,7 +67,7 @@ export class FileINode extends INode<Buffer> {
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
             // TODO Allocate exactly the required size for the last block so the BlockDevice doesn't have to do it
-            const blockData = data.subarray(i * this.blockDevice.blockSize, (i + 1) * this.blockDevice.blockSize);
+            const blockData = data.subarray(i * this.blockDevice.getBlockSize(), (i + 1) * this.blockDevice.getBlockSize());
             await this.blockDevice.writeBlock(this.dataBlockIds[i], blockData);
         }
 
@@ -76,7 +76,7 @@ export class FileINode extends INode<Buffer> {
         this.size = data.length;
         this.modificationTime = new Date();
 
-        const buffer = Buffer.alloc(this.blockDevice.blockSize);
+        const buffer = Buffer.alloc(this.blockDevice.getBlockSize());
         buffer.writeBigUInt64BE(BigInt(this.creationTime.getTime()), 0);
         buffer.writeBigUInt64BE(BigInt(this.modificationTime.getTime()), 8);
         buffer.writeInt32BE(this.size, 16);
@@ -101,23 +101,23 @@ export class FileINode extends INode<Buffer> {
         this.modificationTime = new Date();
     }
 
-    public static async createEmptyFile(blockDevice: KvBlockDevice): Promise<FileINode> {
+    public static async createEmptyFile(blockDevice: KvBlockDevice): Promise<KvINodeFile> {
         const id = await blockDevice.getNextINodeId();
         const creationTime = new Date();
         const modificationTime = new Date();
 
-        const buffer = Buffer.alloc(blockDevice.blockSize);
+        const buffer = Buffer.alloc(blockDevice.getBlockSize());
         buffer.writeBigUInt64BE(BigInt(creationTime.getTime()), 0);
         buffer.writeBigUInt64BE(BigInt(modificationTime.getTime()), 8);
         buffer.writeInt32BE(0, 16);
 
-        for (let i = 0; i < (blockDevice.blockSize - 20) / 4; i++) {
+        for (let i = 0; i < (blockDevice.getBlockSize() - 20) / 4; i++) {
             buffer.writeInt32BE(0, 20 + i * 4);
         }
 
         await blockDevice.writeBlock(id, buffer);
 
-        const fileINode = new FileINode(blockDevice, id);
+        const fileINode = new KvINodeFile(blockDevice, id);
         return await fileINode.init();
     }
 }

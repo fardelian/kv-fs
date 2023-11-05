@@ -1,8 +1,6 @@
 import { SuperBlock } from './kv-super-block';
-import { DirectoryINode } from '../inode/kv-directory-inode';
-import { FileINode } from '../inode/kv-file-inode';
-import { KvBlockDevice } from '../block-device/types';
-import { INodeId } from '../inode/kv-inode';
+import { INodeId, KvINodeDirectory, KvINodeFile } from '../inode';
+import { KvBlockDevice } from '../block-devices';
 import { Init, KvError_FS_NotFound } from '../types';
 
 export class KvFilesystem extends Init {
@@ -27,15 +25,15 @@ export class KvFilesystem extends Init {
 
     // File operations
 
-    public async createFile(name: string, directory: DirectoryINode): Promise<FileINode> {
+    public async createFile(name: string, directory: KvINodeDirectory): Promise<KvINodeFile> {
         this.ensureInit();
 
-        const file = await FileINode.createEmptyFile(this.blockDevice);
+        const file = await KvINodeFile.createEmptyFile(this.blockDevice);
         await directory.addEntry(name, file.id);
         return file;
     }
 
-    public async getFile(name: string, directory: DirectoryINode): Promise<FileINode> {
+    public async getFile(name: string, directory: KvINodeDirectory): Promise<KvINodeFile> {
         this.ensureInit();
 
         const iNodeId = await directory.getEntry(name);
@@ -43,11 +41,11 @@ export class KvFilesystem extends Init {
             throw new KvError_FS_NotFound(`File with the name "${name}" does not exist in given INode.`);
         }
 
-        const fileINode = new FileINode(this.blockDevice, iNodeId);
+        const fileINode = new KvINodeFile(this.blockDevice, iNodeId);
         return await fileINode.init();
     }
 
-    public async unlink(name: string, directory: DirectoryINode): Promise<void> {
+    public async unlink(name: string, directory: KvINodeDirectory): Promise<void> {
         this.ensureInit();
 
         const iNodeId = await directory.getEntry(name);
@@ -56,24 +54,24 @@ export class KvFilesystem extends Init {
         }
 
         await directory.removeEntry(name);
-        const file = new FileINode(this.blockDevice, iNodeId);
+        const file = new KvINodeFile(this.blockDevice, iNodeId);
         await file.init();
         await file.unlink();
     }
 
     // Directory operations
 
-    public async createDirectory(name: string, directory: DirectoryINode): Promise<DirectoryINode> {
+    public async createDirectory(name: string, directory: KvINodeDirectory): Promise<KvINodeDirectory> {
         this.ensureInit();
 
         const id = await this.blockDevice.getNextINodeId();
-        const newDirectory = await DirectoryINode.createEmptyDirectory(this.blockDevice, id);
+        const newDirectory = await KvINodeDirectory.createEmptyDirectory(this.blockDevice, id);
         await directory.addEntry(name, newDirectory.id);
 
         return newDirectory;
     }
 
-    public async getDirectory(name: string, parentDirectory: DirectoryINode): Promise<DirectoryINode> {
+    public async getDirectory(name: string, parentDirectory: KvINodeDirectory): Promise<KvINodeDirectory> {
         this.ensureInit();
 
         const iNodeId = await parentDirectory.getEntry(name);
@@ -81,14 +79,14 @@ export class KvFilesystem extends Init {
             throw new KvError_FS_NotFound(`Directory with the name "${name}" does not exist in given INode.`);
         }
 
-        const directory = new DirectoryINode(this.blockDevice, iNodeId);
+        const directory = new KvINodeDirectory(this.blockDevice, iNodeId);
         return await directory.init();
     }
 
-    public async getRootDirectory(): Promise<DirectoryINode> {
+    public async getRootDirectory(): Promise<KvINodeDirectory> {
         this.ensureInit();
 
-        const directory = new DirectoryINode(this.blockDevice, this.superBlock.rootDirectoryId);
+        const directory = new KvINodeDirectory(this.blockDevice, this.superBlock.rootDirectoryId);
         return await directory.init();
     }
 
@@ -107,7 +105,7 @@ export class KvFilesystem extends Init {
         }
 
         await SuperBlock.createSuperBlock(superBlockId, blockDevice, totalBlocks, totalINodes, rootDirectoryId);
-        await DirectoryINode.createEmptyDirectory(blockDevice, rootDirectoryId);
+        await KvINodeDirectory.createEmptyDirectory(blockDevice, rootDirectoryId);
 
         // TODO Return blockDevice and superBlockId instead of filesystem!
         // The user of format() should initialize their own filesystem

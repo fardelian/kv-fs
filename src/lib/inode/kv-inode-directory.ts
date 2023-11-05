@@ -1,10 +1,10 @@
 import { INode, INodeId } from './kv-inode';
-import { KvBlockDevice } from '../block-device/types';
+import { KvBlockDevice } from '../block-devices';
 import { KvError_INode_NameOverflow } from '../types';
 
 type DirectoryEntriesList = Map<string, INodeId>;
 
-export class DirectoryINode extends INode<DirectoryEntriesList> {
+export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     public static readonly MAX_NAME_LENGTH = 255;
     public static readonly OFFSET_NUM_ENTRIES = 16;
     public static readonly OFFSET_ENTRIES_PREFIX = 20;
@@ -19,14 +19,14 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
         await super.init();
 
         const buffer = await this.blockDevice.readBlock(this.id);
-        const numEntries = buffer.readInt32BE(DirectoryINode.OFFSET_NUM_ENTRIES);
+        const numEntries = buffer.readInt32BE(KvINodeDirectory.OFFSET_NUM_ENTRIES);
 
         for (let i = 0; i < numEntries; i++) {
-            const nameOffset = DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268 + 1;
-            const nameLength = buffer.readInt8(DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268);
+            const nameOffset = KvINodeDirectory.OFFSET_ENTRIES_PREFIX + i * 268 + 1;
+            const nameLength = buffer.readInt8(KvINodeDirectory.OFFSET_ENTRIES_PREFIX + i * 268);
 
             const name = buffer.toString('utf8', nameOffset, nameOffset + nameLength);
-            const iNodeId = buffer.readInt32BE(nameOffset + DirectoryINode.MAX_NAME_LENGTH);
+            const iNodeId = buffer.readInt32BE(nameOffset + KvINodeDirectory.MAX_NAME_LENGTH);
 
             this.entries.set(name, iNodeId);
         }
@@ -46,7 +46,7 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
         this.entries = newEntries;
         this.modificationTime = new Date();
 
-        const buffer = Buffer.alloc(this.blockDevice.blockSize);
+        const buffer = Buffer.alloc(this.blockDevice.getBlockSize());
         buffer.writeBigUInt64BE(BigInt(this.creationTime.getTime()), 0);
         buffer.writeBigUInt64BE(BigInt(this.modificationTime.getTime()), 8);
         buffer.writeInt32BE(this.entries.size, 16);
@@ -54,8 +54,8 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
         let i = 0;
         for (const [name, iNodeId] of this.entries) {
             const nameBuffer = Buffer.from(name, 'utf8');
-            if (nameBuffer.length > DirectoryINode.MAX_NAME_LENGTH) {
-                throw new KvError_INode_NameOverflow(`INode name "${name}" length "${name.length}" exceeds maximum length "${DirectoryINode.MAX_NAME_LENGTH}".`);
+            if (nameBuffer.length > KvINodeDirectory.MAX_NAME_LENGTH) {
+                throw new KvError_INode_NameOverflow(`INode name "${name}" length "${name.length}" exceeds maximum length "${KvINodeDirectory.MAX_NAME_LENGTH}".`);
             }
             buffer.writeInt8(nameBuffer.length, 20 + i * 268);
             nameBuffer.copy(buffer, 20 + i * 268 + 1);
@@ -86,15 +86,15 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
         return this.entries.get(name);
     }
 
-    public static async createEmptyDirectory(blockDevice: KvBlockDevice, blockId: INodeId): Promise<DirectoryINode> {
-        const buffer = Buffer.alloc(blockDevice.blockSize);
+    public static async createEmptyDirectory(blockDevice: KvBlockDevice, blockId: INodeId): Promise<KvINodeDirectory> {
+        const buffer = Buffer.alloc(blockDevice.getBlockSize());
         buffer.writeBigUInt64BE(BigInt(Date.now()), 0);
         buffer.writeBigUInt64BE(BigInt(Date.now()), 8);
         buffer.writeInt32BE(0, 16);
 
         await blockDevice.writeBlock(blockId, buffer);
 
-        const directory = new DirectoryINode(blockDevice, blockId);
+        const directory = new KvINodeDirectory(blockDevice, blockId);
         await directory.init();
         await directory.write(new Map());
 

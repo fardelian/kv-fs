@@ -1,9 +1,8 @@
-import { KvFilesystem } from '../lib/filesystem/kv-filesystem';
-import { KvFilesystemEasy } from '../lib/filesystem/kv-filesystem-easy';
-import { KvBlockDeviceFs } from '../lib/block-device/kv-block-device-fs';
-import { KvEncryptionNone } from '../lib/encryption/kv-encryption-none';
-import { mkdir, mkdirSync } from 'fs';
-import { KvEncryptionPassword } from '../lib/encryption/kv-encryption-password';
+import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvBlockDeviceFs } from '../lib/block-devices';
+import { KvEncryptionNone } from '../lib/encryption';
+import { mkdirSync } from 'fs';
+import { KvEncryptedBlockDevice } from '../lib/block-devices';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -15,23 +14,26 @@ const LOCAL_FS_PATH = `${__dirname}/../../data`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
     const t0 = new Date().getTime();
+
+    // Create block device
 
     const encryption = new KvEncryptionNone();
 
-    const blockDevice = new KvBlockDeviceFs(
+    const fsBlockDevice = new KvBlockDeviceFs(
         BLOCK_SIZE,
         LOCAL_FS_PATH,
-        encryption,
     );
-    await blockDevice.init();
+    await fsBlockDevice.init();
+
+    const encryptedFsBlockDevice = new KvEncryptedBlockDevice(fsBlockDevice, encryption);
+    await encryptedFsBlockDevice.init();
 
     // Create file system
 
-    await KvFilesystem.format(blockDevice, TOTAL_BLOCKS, TOTAL_NODES);
+    await KvFilesystem.format(encryptedFsBlockDevice, TOTAL_BLOCKS, TOTAL_NODES);
 
-    const fileSystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
+    const fileSystem = new KvFilesystem(encryptedFsBlockDevice, SUPER_BLOCK_ID);
     await fileSystem.init();
     const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
     await easyFileSystem.init();

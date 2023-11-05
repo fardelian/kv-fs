@@ -1,6 +1,5 @@
-import { FileINode } from '../inode/kv-file-inode';
+import { KvINodeFile, KvINodeDirectory } from '../inode';
 import { KvFilesystem } from './kv-filesystem';
-import { DirectoryINode } from '../inode/kv-directory-inode';
 import { Init, KvError_FS_Exists } from '../types';
 
 export class KvFilesystemEasy extends Init {
@@ -24,7 +23,7 @@ export class KvFilesystemEasy extends Init {
 
     // File operations
 
-    public async createFile(pathName: string): Promise<FileINode> {
+    public async createFile(pathName: string): Promise<KvINodeFile> {
         this.ensureInit();
 
         const path = pathName.split(this.separator);
@@ -39,7 +38,7 @@ export class KvFilesystemEasy extends Init {
         return await this.filesystem.createFile(fileName, directory);
     }
 
-    public async getFile(pathName: string): Promise<FileINode> {
+    public async getFile(pathName: string): Promise<KvINodeFile> {
         this.ensureInit();
 
         const path = pathName.split(this.separator);
@@ -65,7 +64,7 @@ export class KvFilesystemEasy extends Init {
 
     // Directory operations
 
-    public async createDirectory(pathName: string, createPath: boolean = false): Promise<DirectoryINode> {
+    public async createDirectory(pathName: string, createPath: boolean = false): Promise<KvINodeDirectory> {
         this.ensureInit();
 
         const path = pathName.split(this.separator).slice(1);
@@ -84,7 +83,7 @@ export class KvFilesystemEasy extends Init {
         return await this.filesystem.createDirectory(directoryName, directory);
     }
 
-    public async getDirectory(pathName: string): Promise<DirectoryINode> {
+    public async getDirectory(pathName: string): Promise<KvINodeDirectory> {
         this.ensureInit();
 
         const path = pathName.split(this.separator).slice(1);

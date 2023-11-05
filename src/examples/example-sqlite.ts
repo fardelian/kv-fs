@@ -1,6 +1,9 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvBlockDeviceFs, KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { KvEncryptionNone } from '../lib/encryption';
-import { KvBlockDeviceHttpClient } from '../lib/block-devices';
+import { mkdirSync } from 'fs';
+import { KvEncryptedBlockDevice } from '../lib/block-devices';
+import { Database } from 'sqlite3';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -8,24 +11,36 @@ const TOTAL_NODES = 100;
 
 const SUPER_BLOCK_ID = 0;
 
-const PORT = 3000;
+const LOCAL_FS_PATH = `${__dirname}/../../data`;
+mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {
-    // Create client
+    const t0 = new Date().getTime();
 
-    const clientEncryption = new KvEncryptionNone();
+    // Create block device
 
-    const clientBlockDevice = new KvBlockDeviceHttpClient(
+    const encryption = new KvEncryptionNone();
+
+    const database = await new Promise<Database>((resolve, reject) => {
+        const db = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {
+            err ? reject(err) : resolve(db);
+        });
+    });
+
+    const sqliteBlockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
-        `http://localhost:${PORT}`,
-        clientEncryption,
+        database,
     );
+    await sqliteBlockDevice.init();
+
+    const encryptedFsBlockDevice = new KvEncryptedBlockDevice(sqliteBlockDevice, encryption);
+    await encryptedFsBlockDevice.init();
 
     // Create file system
 
-    await KvFilesystem.format(clientBlockDevice, TOTAL_BLOCKS, TOTAL_NODES);
+    await KvFilesystem.format(encryptedFsBlockDevice, TOTAL_BLOCKS, TOTAL_NODES);
 
-    const fileSystem = new KvFilesystem(clientBlockDevice, SUPER_BLOCK_ID);
+    const fileSystem = new KvFilesystem(encryptedFsBlockDevice, SUPER_BLOCK_ID);
     await fileSystem.init();
     const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
     await easyFileSystem.init();
@@ -57,18 +72,8 @@ async function run() {
 
     const rootDir = await easyFileSystem.getDirectory('/');
     console.log('rootDir:', await rootDir.read());
+
+    console.log('time:', new Date().getTime() - t0);
 }
 
 run().catch(console.error);
-
-/*
-
-    Expected output:
-
-    testRead1: hello world
-    testRead2: and hello again
-    testDir: Map(2) { 'test1.txt' => 4, 'test2.txt' => 6 }
-    homeDir: Map(1) { 'florin' => 3 }
-    rootDir: Map(1) { 'home' => 2 }
-
-*/

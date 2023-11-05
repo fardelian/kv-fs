@@ -1,13 +1,13 @@
 export abstract class Init {
     private _initialized: boolean = false;
 
-    protected async init(): Promise<this> {
+    public async init(): Promise<this> {
         this._initialized = true;
 
         return this;
     }
 
-    ensureInit(): void {
+    public ensureInit(): void {
         if (!this._initialized) {
             throw new KvError_Init();
         }
@@ -29,6 +29,9 @@ export class KvError_Init extends KvError {
 }
 
 export class KvError_BD_Overflow extends KvError {
+}
+
+export class KvError_BD_NotFound extends KvError {
 }
 
 export class KvError_INode_NameOverflow extends KvError {

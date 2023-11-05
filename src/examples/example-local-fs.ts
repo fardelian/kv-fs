@@ -2,12 +2,16 @@ import { KvFilesystem } from '../lib/filesystem/kv-filesystem';
 import { KvFilesystemEasy } from '../lib/filesystem/kv-filesystem-easy';
 import { KvBlockDeviceFs } from '../lib/block-device/kv-block-device-fs';
 import { KvEncryptionNone } from '../lib/encryption/kv-encryption-none';
+import { mkdir, mkdirSync } from 'fs';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
 const TOTAL_NODES = 100;
 
 const SUPER_BLOCK_ID = 0;
+
+const LOCAL_FS_PATH = `${__dirname}/../../data`;
+mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -21,8 +25,8 @@ async function run() {
     const encryption = new KvEncryptionNone();
 
     const blockDevice = new KvBlockDeviceFs(
-        `${__dirname}/../../data`,
         BLOCK_SIZE,
+        LOCAL_FS_PATH,
         encryption,
     );
     await blockDevice.init();

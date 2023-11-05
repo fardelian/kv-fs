@@ -3,19 +3,17 @@ import { INodeId } from '../inode/kv-inode';
 import axios from 'axios';
 import { KvEncryption } from '../encryption/types';
 
-export class KvBlockDeviceHttpClient implements KvBlockDevice {
-    public readonly blockSize: number;
-
+export class KvBlockDeviceHttpClient extends KvBlockDevice {
     private readonly baseUrl: string;
     private readonly encryption: KvEncryption;
 
     constructor(
-        baseUrl: string,
         blockSize: number,
+        baseUrl: string,
         encryption: KvEncryption,
     ) {
+        super(blockSize);
         this.baseUrl = baseUrl;
-        this.blockSize = blockSize;
         this.encryption = encryption;
     }
 
@@ -37,12 +35,12 @@ export class KvBlockDeviceHttpClient implements KvBlockDevice {
             throw new Error(`Data size "${data.length}" is larger than block size "${this.blockSize}"`);
         }
 
-        const blockUrl = this.getBlockUrl(blockId);
         const blockData = Buffer.alloc(this.blockSize);
-        const encryptedData = this.encryption.encrypt(data);
-        encryptedData.copy(blockData);
+        data.copy(blockData);
+        const encryptedData = this.encryption.encrypt(blockData);
 
-        await axios.post(blockUrl, { data: { blockData: Array.from(blockData) } });
+        const blockUrl = this.getBlockUrl(blockId);
+        await axios.post(blockUrl, { data: { blockData: Array.from(encryptedData) } });
     }
 
     public async freeBlock(blockId: INodeId): Promise<void> {

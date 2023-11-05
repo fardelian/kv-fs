@@ -1,15 +1,21 @@
 import { INodeId } from '../inode/kv-inode';
+import { Init } from '../types';
 
-export interface KvBlockDevice {
-    blockSize: number;
+export abstract class KvBlockDevice extends Init {
+    public blockSize: number;
 
-    readBlock(blockId: INodeId): Promise<Buffer>;
+    constructor(blockSize: number) {
+        super();
+        this.blockSize = blockSize;
+    }
 
-    writeBlock(blockId: INodeId, data: Buffer): Promise<void>;
+    public abstract readBlock(blockId: INodeId): Promise<Buffer>;
 
-    freeBlock(blockId: INodeId): Promise<void>;
+    public abstract writeBlock(blockId: INodeId, data: Buffer): Promise<void>;
 
-    existsBlock(blockId: INodeId): Promise<boolean>;
+    public abstract freeBlock(blockId: INodeId): Promise<void>;
 
-    getNextINodeId(): Promise<INodeId>;
+    public abstract existsBlock(blockId: INodeId): Promise<boolean>;
+
+    public abstract getNextINodeId(): Promise<INodeId>;
 }

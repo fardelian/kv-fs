@@ -66,6 +66,7 @@ export class FileINode extends INode<Buffer> {
         // Write the data to the blocks
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
+            // TODO Allocate exactly the required size for the last block so the BlockDevice doesn't have to do it
             const blockData = data.subarray(i * this.blockDevice.blockSize, (i + 1) * this.blockDevice.blockSize);
             await this.blockDevice.writeBlock(this.dataBlockIds[i], blockData);
         }

@@ -17,8 +17,8 @@ async function run() {
     const clientEncryption = new KvEncryptionNone();
 
     const clientBlockDevice = new KvBlockDeviceHttpClient(
-        `http://localhost:${PORT}`,
         BLOCK_SIZE,
+        `http://localhost:${PORT}`,
         clientEncryption,
     );
 
@@ -35,18 +35,18 @@ async function run() {
 
     await easyFileSystem.createDirectory('/home/florin', true);
 
-    const testWrite1 = '/home/florin/test1.txt';
-    const testFile1 = await easyFileSystem.createFile(testWrite1);
+    const testPath1 = '/home/florin/test1.txt';
+    const testFile1 = await easyFileSystem.createFile(testPath1);
     await testFile1.write(Buffer.from('hello world'));
 
-    const testWrite2 = '/home/florin/test2.txt';
-    const testFile2 = await easyFileSystem.createFile(testWrite2);
+    const testPath2 = '/home/florin/test2.txt';
+    const testFile2 = await easyFileSystem.createFile(testPath2);
     await testFile2.write(Buffer.from('and hello again'));
 
     // Read test files
 
-    const testRead1 = await easyFileSystem.readFile('/home/florin/test1.txt');
-    const testRead2 = await easyFileSystem.readFile('/home/florin/test2.txt');
+    const testRead1 = await easyFileSystem.readFile(testPath1);
+    const testRead2 = await easyFileSystem.readFile(testPath2);
     const testDir = await easyFileSystem.getDirectory('/home/florin');
 
     console.log('testRead1:', testRead1.toString());

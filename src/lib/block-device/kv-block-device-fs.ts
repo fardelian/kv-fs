@@ -2,23 +2,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { KvBlockDevice } from './types';
 import { INodeId } from '../inode/kv-inode';
-import { Init, KvError_BD_Overflow } from '../types';
+import { KvError_BD_Overflow } from '../types';
 import { KvEncryption } from '../encryption/types';
 
-export class KvBlockDeviceFs extends Init implements KvBlockDevice {
-    public readonly blockSize: number;
-
+export class KvBlockDeviceFs extends KvBlockDevice {
     private readonly localBasePath: string;
     private readonly encryption: KvEncryption;
 
     constructor(
-        localFsPath: string,
         blockSize: number,
+        localFsPath: string,
         encryption: KvEncryption,
     ) {
-        super();
+        super(blockSize);
         this.localBasePath = localFsPath;
-        this.blockSize = blockSize;
         this.encryption = encryption;
     }
 
@@ -53,10 +50,10 @@ export class KvBlockDeviceFs extends Init implements KvBlockDevice {
         const blockPath = this.getBlockPath(blockId);
 
         const blockData = Buffer.alloc(this.blockSize);
-        const encryptedData = this.encryption.encrypt(data);
-        encryptedData.copy(blockData);
+        data.copy(blockData);
+        const encryptedData = this.encryption.encrypt(blockData);
 
-        fs.writeFileSync(blockPath, blockData);
+        fs.writeFileSync(blockPath, encryptedData);
     }
 
     public async freeBlock(blockId: INodeId): Promise<void> {

@@ -39,8 +39,8 @@ export class KvBlockDeviceFs extends Init implements KvBlockDevice {
 
         const blockPath = this.getBlockPath(blockId);
 
-        const rawData = fs.readFileSync(blockPath);
-        return this.encryption.decrypt(rawData);
+        const encryptedData = fs.readFileSync(blockPath);
+        return this.encryption.decrypt(encryptedData);
     }
 
     public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
@@ -52,9 +52,10 @@ export class KvBlockDeviceFs extends Init implements KvBlockDevice {
 
         const blockPath = this.getBlockPath(blockId);
 
-        const rawData = this.encryption.encrypt(data);
         const blockData = Buffer.alloc(this.blockSize);
-        rawData.copy(blockData);
+        const encryptedData = this.encryption.encrypt(data);
+        encryptedData.copy(blockData);
+
         fs.writeFileSync(blockPath, blockData);
     }
 

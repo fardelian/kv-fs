@@ -25,9 +25,9 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
             const nameLength = buffer.readInt8(DirectoryINode.OFFSET_ENTRIES_PREFIX + i * 268);
 
             const name = buffer.toString('utf8', nameOffset, nameOffset + nameLength);
-            const inodeId = buffer.readInt32BE(nameOffset + DirectoryINode.MAX_NAME_LENGTH);
+            const iNodeId = buffer.readInt32BE(nameOffset + DirectoryINode.MAX_NAME_LENGTH);
 
-            this.entries.set(name, inodeId);
+            this.entries.set(name, iNodeId);
         }
 
         return this;
@@ -51,24 +51,24 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
         buffer.writeInt32BE(this.entries.size, 16);
 
         let i = 0;
-        for (const [name, inodeId] of this.entries) {
+        for (const [name, iNodeId] of this.entries) {
             const nameBuffer = Buffer.from(name, 'utf8');
             if (nameBuffer.length > DirectoryINode.MAX_NAME_LENGTH) {
                 throw new Error('Name is too long for a directory entry');
             }
             buffer.writeInt8(nameBuffer.length, 20 + i * 268);
             nameBuffer.copy(buffer, 20 + i * 268 + 1);
-            buffer.writeInt32BE(inodeId, 20 + i * 268 + 256);
+            buffer.writeInt32BE(iNodeId, 20 + i * 268 + 256);
             i++;
         }
 
         await this.blockDevice.writeBlock(this.id, buffer);
     }
 
-    public async addEntry(name: string, inodeId: INodeId): Promise<void> {
+    public async addEntry(name: string, iNodeId: INodeId): Promise<void> {
         this.checkInit();
 
-        this.entries.set(name, inodeId);
+        this.entries.set(name, iNodeId);
         await this.write(this.entries);
     }
 

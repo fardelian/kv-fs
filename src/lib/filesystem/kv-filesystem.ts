@@ -50,13 +50,13 @@ export class KvFilesystem extends Init {
     public async unlink(name: string, directory: DirectoryINode): Promise<void> {
         this.checkInit();
 
-        const inodeId = await directory.getEntry(name);
-        if (inodeId === undefined) {
+        const iNodeId = await directory.getEntry(name);
+        if (iNodeId === undefined) {
             throw new KvError_FS_NotFound(`File with the name "${name}" does not exist in given INode.`);
         }
 
         await directory.removeEntry(name);
-        const file = new FileINode(this.blockDevice, inodeId);
+        const file = new FileINode(this.blockDevice, iNodeId);
         await file.init();
         await file.unlink();
     }
@@ -76,12 +76,12 @@ export class KvFilesystem extends Init {
     public async getDirectory(name: string, parentDirectory: DirectoryINode): Promise<DirectoryINode> {
         this.checkInit();
 
-        const inodeId = await parentDirectory.getEntry(name);
-        if (inodeId === undefined) {
+        const iNodeId = await parentDirectory.getEntry(name);
+        if (iNodeId === undefined) {
             throw new KvError_FS_NotFound(`Directory with the name "${name}" does not exist in given INode.`);
         }
 
-        const directory = new DirectoryINode(this.blockDevice, inodeId);
+        const directory = new DirectoryINode(this.blockDevice, iNodeId);
         return await directory.init();
     }
 

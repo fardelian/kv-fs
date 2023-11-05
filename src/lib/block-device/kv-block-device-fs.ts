@@ -26,13 +26,13 @@ export class KvBlockDeviceFs extends KvBlockDevice {
     }
 
     private getBlockPath(blockId: INodeId): string {
-        this.checkInit();
+        this.ensureInit();
 
         return path.join(this.localBasePath, blockId.toString()) + '.txt';
     }
 
     public async readBlock(blockId: INodeId): Promise<Buffer> {
-        this.checkInit();
+        this.ensureInit();
 
         const blockPath = this.getBlockPath(blockId);
 
@@ -41,7 +41,7 @@ export class KvBlockDeviceFs extends KvBlockDevice {
     }
 
     public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
-        this.checkInit();
+        this.ensureInit();
 
         if (data.length > this.blockSize) {
             throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.blockSize}" bytes.`);
@@ -57,20 +57,20 @@ export class KvBlockDeviceFs extends KvBlockDevice {
     }
 
     public async freeBlock(blockId: INodeId): Promise<void> {
-        this.checkInit();
+        this.ensureInit();
 
         const blockPath = this.getBlockPath(blockId);
         fs.unlinkSync(blockPath);
     }
 
     public async existsBlock(blockId: INodeId): Promise<boolean> {
-        this.checkInit();
+        this.ensureInit();
 
         return fs.existsSync(this.getBlockPath(blockId));
     }
 
     public async getNextINodeId(): Promise<INodeId> {
-        this.checkInit();
+        this.ensureInit();
 
         let blockId = 0;
         while (await this.existsBlock(blockId)) {

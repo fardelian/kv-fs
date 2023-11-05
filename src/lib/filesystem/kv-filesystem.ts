@@ -28,7 +28,7 @@ export class KvFilesystem extends Init {
     // File operations
 
     public async createFile(name: string, directory: DirectoryINode): Promise<FileINode> {
-        this.checkInit();
+        this.ensureInit();
 
         const file = await FileINode.createEmptyFile(this.blockDevice);
         await directory.addEntry(name, file.id);
@@ -36,7 +36,7 @@ export class KvFilesystem extends Init {
     }
 
     public async getFile(name: string, directory: DirectoryINode): Promise<FileINode> {
-        this.checkInit();
+        this.ensureInit();
 
         const iNodeId = await directory.getEntry(name);
         if (iNodeId === undefined) {
@@ -48,7 +48,7 @@ export class KvFilesystem extends Init {
     }
 
     public async unlink(name: string, directory: DirectoryINode): Promise<void> {
-        this.checkInit();
+        this.ensureInit();
 
         const iNodeId = await directory.getEntry(name);
         if (iNodeId === undefined) {
@@ -64,7 +64,7 @@ export class KvFilesystem extends Init {
     // Directory operations
 
     public async createDirectory(name: string, directory: DirectoryINode): Promise<DirectoryINode> {
-        this.checkInit();
+        this.ensureInit();
 
         const id = await this.blockDevice.getNextINodeId();
         const newDirectory = await DirectoryINode.createEmptyDirectory(this.blockDevice, id);
@@ -74,7 +74,7 @@ export class KvFilesystem extends Init {
     }
 
     public async getDirectory(name: string, parentDirectory: DirectoryINode): Promise<DirectoryINode> {
-        this.checkInit();
+        this.ensureInit();
 
         const iNodeId = await parentDirectory.getEntry(name);
         if (iNodeId === undefined) {
@@ -86,7 +86,7 @@ export class KvFilesystem extends Init {
     }
 
     public async getRootDirectory(): Promise<DirectoryINode> {
-        this.checkInit();
+        this.ensureInit();
 
         const directory = new DirectoryINode(this.blockDevice, this.superBlock.rootDirectoryId);
         return await directory.init();

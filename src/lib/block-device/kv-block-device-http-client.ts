@@ -2,6 +2,7 @@ import { KvBlockDevice } from './types';
 import { INodeId } from '../inode/kv-inode';
 import axios from 'axios';
 import { KvEncryption } from '../encryption/types';
+import { KvError_BD_Overflow } from '../types';
 
 export class KvBlockDeviceHttpClient extends KvBlockDevice {
     private readonly baseUrl: string;
@@ -32,7 +33,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
 
     public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
         if (data.length > this.blockSize) {
-            throw new Error(`Data size "${data.length}" is larger than block size "${this.blockSize}"`);
+            throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.blockSize}" bytes.`);
         }
 
         const blockData = Buffer.alloc(this.blockSize);

@@ -1,5 +1,6 @@
 import { INode, INodeId } from './kv-inode';
 import { KvBlockDevice } from '../block-device/types';
+import { KvError_INode_NameOverflow } from '../types';
 
 type DirectoryEntriesList = Map<string, INodeId>;
 
@@ -34,13 +35,13 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
     }
 
     public async read(): Promise<DirectoryEntriesList> {
-        this.checkInit();
+        this.ensureInit();
 
         return new Map(this.entries);
     }
 
     public async write(newEntries: DirectoryEntriesList): Promise<void> {
-        this.checkInit();
+        this.ensureInit();
 
         this.entries = newEntries;
         this.modificationTime = new Date();
@@ -54,7 +55,7 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
         for (const [name, iNodeId] of this.entries) {
             const nameBuffer = Buffer.from(name, 'utf8');
             if (nameBuffer.length > DirectoryINode.MAX_NAME_LENGTH) {
-                throw new Error('Name is too long for a directory entry');
+                throw new KvError_INode_NameOverflow(`INode name "${name}" length "${name.length}" exceeds maximum length "${DirectoryINode.MAX_NAME_LENGTH}".`);
             }
             buffer.writeInt8(nameBuffer.length, 20 + i * 268);
             nameBuffer.copy(buffer, 20 + i * 268 + 1);
@@ -66,21 +67,21 @@ export class DirectoryINode extends INode<DirectoryEntriesList> {
     }
 
     public async addEntry(name: string, iNodeId: INodeId): Promise<void> {
-        this.checkInit();
+        this.ensureInit();
 
         this.entries.set(name, iNodeId);
         await this.write(this.entries);
     }
 
     public async removeEntry(name: string): Promise<void> {
-        this.checkInit();
+        this.ensureInit();
 
         this.entries.delete(name);
         await this.write(this.entries);
     }
 
     public async getEntry(name: string): Promise<INodeId | undefined> {
-        this.checkInit();
+        this.ensureInit();
 
         return this.entries.get(name);
     }

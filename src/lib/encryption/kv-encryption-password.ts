@@ -6,9 +6,10 @@ export class KvEncryptionPassword extends KvEncryptionKey {
 
     constructor(
         password: string,
+        salt: string,
         iterations: number = KvEncryptionPassword.ITERATIONS,
     ) {
-        const key = KvEncryptionPassword.generateKeyFromPassword(password, 'salt', iterations);
+        const key = KvEncryptionPassword.generateKeyFromPassword(password, salt, iterations);
         super(key);
     }
 

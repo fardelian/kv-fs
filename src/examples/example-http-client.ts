@@ -61,3 +61,15 @@ async function run() {
 }
 
 run().catch(console.error);
+
+/*
+
+    Expected output:
+
+    testRead1: hello world
+    testRead2: and hello again
+    testDir: Map(2) { 'test1.txt' => 4, 'test2.txt' => 6 }
+    homeDir: Map(1) { 'florin' => 3 }
+    rootDir: Map(1) { 'home' => 2 }
+
+*/

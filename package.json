@@ -12,16 +12,16 @@
     "start-http-client": "ts-node src/examples/example-http-client.ts"
   },
   "devDependencies": {
-    "@types/express": "^4.17.20",
-    "@types/node": "^20.2.5",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.0.4"
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.15",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@types/sqlite3": "^3.1.10",
-    "axios": "^1.6.0",
-    "express": "^4.18.2",
+    "@types/sqlite3": "^5.1.0",
+    "axios": "^1.11.0",
+    "express": "^5.1.0",
     "express-router": "^0.0.1",
-    "sqlite3": "^5.1.6"
+    "sqlite3": "^5.1.7"
   }
 }

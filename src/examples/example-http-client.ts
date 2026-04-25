@@ -17,6 +17,7 @@ async function run() {
 
     const clientBlockDevice = new KvBlockDeviceHttpClient(
         BLOCK_SIZE,
+        BLOCK_SIZE * TOTAL_BLOCKS,
         `http://localhost:${PORT}`,
         clientEncryption,
     );

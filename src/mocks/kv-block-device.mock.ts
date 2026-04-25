@@ -10,7 +10,7 @@ export class MockBlockDevice extends KvBlockDevice {
     public existsBlock = jest.fn<(blockId: INodeId) => Promise<boolean>>();
     public allocateBlock = jest.fn<() => Promise<INodeId>>();
 
-    constructor(blockSize: number = 4096) {
-        super(blockSize);
+    constructor(blockSize: number = 4096, capacityBytes: number = blockSize * 1024) {
+        super(blockSize, capacityBytes);
     }
 }

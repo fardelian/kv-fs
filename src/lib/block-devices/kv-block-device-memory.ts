@@ -7,8 +7,8 @@ import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils/errors';
 export class KvBlockDeviceMemory extends KvBlockDevice {
     private readonly blocks = new Map<INodeId, Uint8Array>();
 
-    constructor(blockSize: number) {
-        super(blockSize);
+    constructor(blockSize: number, capacityBytes: number) {
+        super(blockSize, capacityBytes);
     }
 
     @Init

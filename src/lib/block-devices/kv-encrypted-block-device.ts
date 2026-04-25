@@ -13,7 +13,7 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
         blockDevice: KvBlockDevice,
         encryption: KvEncryption,
     ) {
-        super(blockDevice.getBlockSize());
+        super(blockDevice.getBlockSize(), blockDevice.getMaxBlockId() * blockDevice.getBlockSize());
 
         this.blockDevice = blockDevice;
         this.encryption = encryption;

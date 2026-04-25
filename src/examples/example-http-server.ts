@@ -9,6 +9,7 @@ import { mkdirSync } from 'fs';
 import { Database } from 'sqlite3';
 
 const BLOCK_SIZE = 4096;
+const TOTAL_BLOCKS = 1000;
 const PORT = 3000;
 
 const LOCAL_FS_PATH = `${__dirname}/../../data`;
@@ -25,6 +26,7 @@ async function run() {
 
     const sqliteBlockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
+        BLOCK_SIZE * TOTAL_BLOCKS,
         database,
     );
 

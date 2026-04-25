@@ -29,4 +29,28 @@ describe('KvBlockDevice (base)', () => {
             expect(b.getBlockSize()).toBe(sizeB);
         });
     });
+
+    describe('getMaxBlockId', () => {
+        it('returns capacityBytes / blockSize when they divide evenly', () => {
+            const blockSize = 4096;
+            const blocks = faker.number.int({ min: 1, max: 1000 });
+            const device = new MockBlockDevice(blockSize, blockSize * blocks);
+
+            expect(device.getMaxBlockId()).toBe(blocks);
+        });
+
+        it('floors when capacityBytes is not a multiple of blockSize', () => {
+            const blockSize = 4096;
+            const device = new MockBlockDevice(blockSize, blockSize * 3 + 1234);
+
+            expect(device.getMaxBlockId()).toBe(3);
+        });
+
+        it('returns 0 when capacityBytes is smaller than blockSize', () => {
+            const blockSize = 4096;
+            const device = new MockBlockDevice(blockSize, blockSize - 1);
+
+            expect(device.getMaxBlockId()).toBe(0);
+        });
+    });
 });

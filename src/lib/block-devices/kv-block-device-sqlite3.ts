@@ -9,9 +9,10 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
 
     constructor(
         blockSize: number,
+        capacityBytes: number,
         dataBasePath: Database,
     ) {
-        super(blockSize);
+        super(blockSize, capacityBytes);
         this.database = dataBasePath;
     }
 

@@ -4,12 +4,13 @@ import { KvBlockDeviceMemory } from './kv-block-device-memory';
 import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils/errors';
 
 const BLOCK_SIZE = 4096;
+const CAPACITY_BYTES = BLOCK_SIZE * 1024;
 
 describe('KvBlockDeviceMemory', () => {
     let device: KvBlockDeviceMemory;
 
     beforeEach(() => {
-        device = new KvBlockDeviceMemory(BLOCK_SIZE);
+        device = new KvBlockDeviceMemory(BLOCK_SIZE, CAPACITY_BYTES);
     });
 
     describe('writeBlock + readBlock', () => {

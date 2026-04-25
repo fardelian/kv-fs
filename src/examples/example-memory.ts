@@ -15,7 +15,7 @@ async function run() {
 
     const encryption = new KvEncryptionNone();
 
-    const memoryBlockDevice = new KvBlockDeviceMemory(BLOCK_SIZE);
+    const memoryBlockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
 
     const encryptedMemoryBlockDevice = new KvEncryptedBlockDevice(memoryBlockDevice, encryption);
 

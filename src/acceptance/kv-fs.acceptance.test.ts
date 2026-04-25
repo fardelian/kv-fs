@@ -9,7 +9,7 @@ const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 async function makeFs(): Promise<KvFilesystemEasy> {
-    const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE);
+    const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     await KvFilesystem.format(blockDevice, TOTAL_BLOCKS, TOTAL_INODES);
     const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
     return new KvFilesystemEasy(filesystem, '/');

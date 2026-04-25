@@ -11,10 +11,11 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
 
     constructor(
         blockSize: number,
+        capacityBytes: number,
         baseUrl: string,
         encryption: KvEncryption,
     ) {
-        super(blockSize);
+        super(blockSize, capacityBytes);
         this.baseUrl = baseUrl;
         this.encryption = encryption;
     }

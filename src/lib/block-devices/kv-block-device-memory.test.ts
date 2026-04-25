@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory } from './kv-block-device-memory';
-import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils/errors';
+import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils';
 
 const BLOCK_SIZE = 4096;
 const CAPACITY_BYTES = BLOCK_SIZE * 1024;

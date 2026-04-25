@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
-import { KvError_BD_Overflow } from '../utils/errors';
+import { KvError_BD_Overflow } from '../utils';
 
 /** KvBlockDevice which uses the local file system. */
 export class KvBlockDeviceFs extends KvBlockDevice {

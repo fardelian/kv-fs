@@ -1,6 +1,6 @@
 import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
-import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils/errors';
+import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils';
 
 /** KvBlockDevice that keeps blocks in a `Map` in process memory. Ephemeral. */
 export class KvBlockDeviceMemory extends KvBlockDevice {

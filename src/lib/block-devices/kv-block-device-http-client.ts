@@ -1,6 +1,6 @@
 import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
-import { KvError_BD_Overflow } from '../utils/errors';
+import { KvError_BD_Overflow } from '../utils';
 import { KvEncryption } from '../encryption';
 
 /** KvBlockDevice which uses a remote HTTP server. */

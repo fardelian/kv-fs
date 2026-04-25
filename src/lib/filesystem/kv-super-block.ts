@@ -1,6 +1,6 @@
 import { KvBlockDevice } from '../block-devices';
 import { INodeId } from '../inode';
-import { dataView } from '../utils/bytes';
+import { dataView } from '../utils';
 
 export class SuperBlock {
     private blockDevice: KvBlockDevice;

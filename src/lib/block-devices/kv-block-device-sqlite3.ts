@@ -2,8 +2,7 @@ import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
 import { Database } from 'sqlite3';
 import { promisify } from 'node:util';
-import { Init } from '../utils/init';
-import { KvError_BD_NotFound } from '../utils/errors';
+import { Init, KvError_BD_NotFound } from '../utils';
 
 type DbRun = (sql: string, params?: unknown[]) => Promise<void>;
 type DbGet = <T>(sql: string, params?: unknown[]) => Promise<T | undefined>;

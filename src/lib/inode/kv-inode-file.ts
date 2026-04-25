@@ -1,7 +1,6 @@
 import { INode, INodeId } from './helpers/kv-inode';
 import { KvBlockDevice } from '../block-devices';
-import { Init } from '../utils/init';
-import { dataView } from '../utils/bytes';
+import { Init, dataView } from '../utils';
 
 export class KvINodeFile extends INode<Uint8Array> {
     public size = 0;

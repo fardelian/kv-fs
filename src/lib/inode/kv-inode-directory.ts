@@ -1,8 +1,6 @@
 import { INode, INodeId } from './helpers/kv-inode';
 import { KvBlockDevice } from '../block-devices';
-import { Init } from '../utils/init';
-import { dataView, utf8Decode, utf8Encode } from '../utils/bytes';
-import { KvError_INode_NameOverflow } from '../utils/errors';
+import { Init, dataView, utf8Decode, utf8Encode, KvError_INode_NameOverflow } from '../utils';
 
 type DirectoryEntriesList = Map<string, INodeId>;
 

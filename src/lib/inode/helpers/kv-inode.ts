@@ -1,5 +1,5 @@
 import { KvBlockDevice } from '../../block-devices';
-import { dataView } from '../../utils/bytes';
+import { dataView } from '../../utils';
 
 export type INodeId = number;
 

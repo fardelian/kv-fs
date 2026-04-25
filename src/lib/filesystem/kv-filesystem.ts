@@ -1,8 +1,7 @@
 import { SuperBlock } from './kv-super-block';
 import { INodeId, KvINodeDirectory, KvINodeFile } from '../inode';
 import { KvBlockDevice } from '../block-devices';
-import { Init } from '../utils/init';
-import { KvError_FS_NotFound } from '../utils/errors';
+import { Init, KvError_FS_NotFound } from '../utils';
 
 export class KvFilesystem {
     private blockDevice: KvBlockDevice;

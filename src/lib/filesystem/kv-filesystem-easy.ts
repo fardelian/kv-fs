@@ -1,6 +1,6 @@
 import { KvINodeFile, KvINodeDirectory } from '../inode';
 import { KvFilesystem } from './kv-filesystem';
-import { KvError_FS_Exists } from '../utils/errors';
+import { KvError_FS_Exists } from '../utils';
 
 export class KvFilesystemEasy {
     private readonly filesystem: KvFilesystem;

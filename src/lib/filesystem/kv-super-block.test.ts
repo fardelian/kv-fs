@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { SuperBlock } from './kv-super-block';
 import { MockBlockDevice } from '../../mocks/kv-block-device.mock';
-import { dataView } from '../utils/bytes';
+import { dataView } from '../utils';
 
 const BLOCK_SIZE = 4096;
 

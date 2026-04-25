@@ -190,8 +190,6 @@ export class KvINodeFile extends INode<Uint8Array> {
      * persist the inode block twice for one logical operation.
      */
     private async resize(length: number): Promise<void> {
-        if (length === this.size) return;
-
         const blockSize = this.blockDevice.getBlockSize();
         const requiredBlocks = length === 0 ? 0 : Math.ceil(length / blockSize);
 

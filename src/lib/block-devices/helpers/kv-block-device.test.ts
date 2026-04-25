@@ -47,6 +47,31 @@ describe('KvBlockDevice (base)', () => {
         });
     });
 
+    describe('createBlock (default implementation)', () => {
+        it('allocates a new block, writes data to it, and returns the new id', async () => {
+            const device = new MockBlockDevice(4096);
+            device.allocateBlock.mockResolvedValueOnce(7);
+            device.writeBlock.mockResolvedValueOnce(undefined);
+
+            const data = new Uint8Array([1, 2, 3]);
+            const id = await device.createBlock(data);
+
+            expect(device.allocateBlock).toHaveBeenCalledTimes(1);
+            expect(device.writeBlock).toHaveBeenCalledTimes(1);
+            expect(device.writeBlock).toHaveBeenCalledWith(7, data);
+            expect(id).toBe(7);
+        });
+
+        it('propagates errors from writeBlock', async () => {
+            const device = new MockBlockDevice(4096);
+            device.allocateBlock.mockResolvedValueOnce(0);
+            const err = new Error('write failed');
+            device.writeBlock.mockRejectedValueOnce(err);
+
+            await expect(device.createBlock(new Uint8Array(1))).rejects.toBe(err);
+        });
+    });
+
     describe('getCapacityBlocks', () => {
         it('returns capacityBytes / blockSize when they divide evenly', () => {
             const blockSize = 4096;

@@ -280,6 +280,21 @@ describe('KvINodeDirectory', () => {
     });
 
     describe('name validation', () => {
+        it('rejects names whose UTF-8 byte length exceeds the 16-bit MAX_NAME_LENGTH', async () => {
+            // We need a block big enough that the per-block fits-check would
+            // *not* fire first — so the MAX_NAME_LENGTH check is the one to
+            // throw. With a 70 KiB block, a 65 KiB name fits dimensionally
+            // but exceeds the uint16 length limit.
+            const BIG_BLOCK = 70 * 1024;
+            const device = new KvBlockDeviceMemory(BIG_BLOCK, BIG_BLOCK * 4);
+            const blockId = await device.allocateBlock();
+            const dir = await KvINodeDirectory.createEmptyDirectory(device, blockId);
+
+            const tooLong = 'a'.repeat(KvINodeDirectory.MAX_NAME_LENGTH + 1);
+
+            await expect(dir.addEntry(tooLong, 1)).rejects.toThrow(KvError_INode_NameOverflow);
+        });
+
         it('rejects names whose entry size exceeds a single block', async () => {
             const { dir } = await makeDir();
             // The hard cap is `continuationEntryArea - ENTRY_OVERHEAD_BYTES`

@@ -4,7 +4,7 @@ import stylistic from '@stylistic/eslint-plugin';
 
 export default tseslint.config(
     {
-        ignores: ['dist/', 'node_modules/', 'data/', 'coverage/'],
+        ignores: ['dist/', 'node_modules/', 'data/', '.coverage/'],
     },
 
     js.configs.recommended,

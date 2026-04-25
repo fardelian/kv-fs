@@ -238,6 +238,56 @@ describe('KvINodeFile', () => {
         });
     });
 
+    describe('edge cases at boundaries', () => {
+        it('read(0) returns an empty buffer without advancing position', async () => {
+            const { file } = await makeFile();
+            await file.write(pattern(50));
+            await file.setPos(10);
+
+            const empty = await file.read(0);
+
+            expect(empty).toBeInstanceOf(Uint8Array);
+            expect(empty.length).toBe(0);
+            expect(file.getPos()).toBe(10);
+        });
+
+        it('write of an empty buffer is a no-op (does not advance position or extend the file)', async () => {
+            const { file } = await makeFile();
+            await file.write(pattern(20));
+            await file.setPos(5);
+
+            await file.write(new Uint8Array(0));
+
+            expect(file.getPos()).toBe(5);
+            expect(file.size).toBe(20);
+        });
+
+        it('truncate(currentSize) is a no-op (resize early-exit path)', async () => {
+            const { device, file } = await makeFile();
+            await file.write(pattern(BLOCK_SIZE));
+            const blocksBefore = device._dumpBlocks().length;
+
+            await file.truncate(file.size);
+
+            expect(device._dumpBlocks().length).toBe(blocksBefore);
+            expect(file.size).toBe(BLOCK_SIZE);
+        });
+
+        it('unlink frees every data block plus the inode block', async () => {
+            const { device, file } = await makeFile();
+            await file.write(pattern(BLOCK_SIZE * 3));
+            const blocksBefore = device._dumpBlocks().length;
+            expect(blocksBefore).toBe(4); // inode + 3 data blocks
+
+            await file.unlink();
+
+            // unlink frees all data blocks and the inode block.
+            expect(device._dumpBlocks().length).toBe(0);
+            expect(file.size).toBe(0);
+            expect(file.getPos()).toBe(0);
+        });
+    });
+
     describe('read/write spanning multiple blocks', () => {
         it('round-trips a 4-block payload', async () => {
             const { file } = await makeFile();

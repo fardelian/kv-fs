@@ -3,11 +3,13 @@ import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvINodeFile } from './kv-inode-file';
 
-// 1 KiB blocks leave 1012 bytes for data-block-id pointers in the inode
-// (block size minus the 12-byte header), with plenty of room left if we want
-// to add more metadata fields later.
+// 1 KiB blocks. With the inode header (16 bytes timestamps + 8 bytes size
+// = 24) and the 4-byte indirect-block footer, that leaves
+// (1024 - 24 - 4) / 4 = 249 direct data-block ID slots before an indirect
+// block kicks in. Tests stay well under that for the small-file paths and
+// explicitly cross it for the indirect-block path.
 const BLOCK_SIZE = 1024;
-const CAPACITY_BYTES = BLOCK_SIZE * 64;
+const CAPACITY_BYTES = BLOCK_SIZE * 1024;
 
 async function makeFile() {
     const device = new KvBlockDeviceMemory(BLOCK_SIZE, CAPACITY_BYTES);
@@ -389,6 +391,77 @@ describe('KvINodeFile', () => {
             expect(last.length).toBe(10);
             expect(Array.from(last)).toEqual(Array.from(pattern(total).subarray(BLOCK_SIZE * 3, total)));
             expect(file.getPos()).toBe(total);
+        });
+    });
+
+    describe('indirect block (files larger than the inline direct-pointer area)', () => {
+        // With 1 KiB blocks, files needing > 249 data blocks spill into an
+        // indirect block. Use a smaller block size in this suite so the
+        // threshold is reachable without writing megabytes per test.
+        const SMALL_BLOCK = 128;
+        // (128 - 24 - 4) / 4 = 25 direct slots, 32 indirect slots.
+        const SMALL_CAPACITY = SMALL_BLOCK * 1024;
+
+        async function makeSmallFile() {
+            const device = new KvBlockDeviceMemory(SMALL_BLOCK, SMALL_CAPACITY);
+            const file = await KvINodeFile.createEmptyFile(device);
+            return { device, file };
+        }
+
+        it('uses no indirect block when the file fits in direct slots', async () => {
+            const { device, file } = await makeSmallFile();
+            // 25 direct slots × 128-byte blocks = 3200 bytes capacity inline.
+            await file.write(pattern(SMALL_BLOCK * 10));
+
+            // Inode + 10 data blocks = 11 blocks; no indirect.
+            expect(device._dumpBlocks().length).toBe(11);
+        });
+
+        it('allocates one indirect block when the file crosses the direct threshold', async () => {
+            const { device, file } = await makeSmallFile();
+            const directSlots = 25;
+            await file.write(pattern(SMALL_BLOCK * (directSlots + 1)));
+
+            // Inode + 26 data blocks + 1 indirect block = 28 blocks.
+            expect(device._dumpBlocks().length).toBe(28);
+        });
+
+        it('round-trips a file whose data block list spans direct + indirect', async () => {
+            const { device, file } = await makeSmallFile();
+            const totalBlocks = 25 + 20; // 25 direct + 20 indirect
+            const totalBytes = SMALL_BLOCK * totalBlocks;
+            const payload = pattern(totalBytes, 0x33);
+            await file.write(payload);
+
+            // Reopen via fresh KvINodeFile to force re-init from disk.
+            const reopened = new KvINodeFile(device, file.id);
+            await reopened.setPos(0);
+            const readBack = await reopened.read();
+
+            expect(readBack.length).toBe(totalBytes);
+            expect(Array.from(readBack)).toEqual(Array.from(payload));
+        });
+
+        it('frees the indirect block when the file shrinks back into the direct area', async () => {
+            const { device, file } = await makeSmallFile();
+            const directSlots = 25;
+            await file.write(pattern(SMALL_BLOCK * (directSlots + 5))); // 30 data blocks → indirect needed
+            const peakBlockCount = device._dumpBlocks().length;
+            expect(peakBlockCount).toBe(1 + 30 + 1); // inode + data + indirect
+
+            await file.truncate(SMALL_BLOCK * 5); // 5 data blocks: well within direct
+            // Inode + 5 data blocks; indirect freed.
+            expect(device._dumpBlocks().length).toBe(6);
+        });
+
+        it('unlink frees direct + indirect + inode blocks', async () => {
+            const { device, file } = await makeSmallFile();
+            await file.write(pattern(SMALL_BLOCK * 30)); // 30 data blocks → indirect needed
+            expect(device._dumpBlocks().length).toBe(1 + 30 + 1);
+
+            await file.unlink();
+
+            expect(device._dumpBlocks().length).toBe(0);
         });
     });
 });

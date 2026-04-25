@@ -28,8 +28,12 @@ export class SuperBlock {
      *
      * v1: initial versioned format.
      * v2: 64-bit timestamps and file sizes; capacityBytes widened to uint64.
+     * v3: file inodes carry an indirect-block pointer at the end of the
+     *     inode block (4 bytes), shrinking the inline direct-block area by
+     *     one slot but enabling files larger than what fits in a single
+     *     inode's pointer list.
      */
-    public static readonly FORMAT_VERSION = 2;
+    public static readonly FORMAT_VERSION = 3;
 
     public static readonly OFFSET_FORMAT_VERSION = 0;
     public static readonly OFFSET_CAPACITY_BYTES = 4;

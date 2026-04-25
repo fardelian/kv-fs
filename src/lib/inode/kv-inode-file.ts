@@ -5,20 +5,47 @@ import { Init, dataView } from '../utils';
 /**
  * On-disk layout (extends `INode`'s 16-byte header):
  * ```
- *   [ 0..16)            creationTime + modificationTime  (see INode)
- *   [16..24)            size  (uint64)
- *   [24..)              data block IDs (uint32 each, packed densely)
+ *   [ 0..16)              creationTime + modificationTime  (see INode)
+ *   [16..24)              size  (uint64)
+ *   [24..blockSize - 4)   direct data block IDs (uint32 each, packed)
+ *   [blockSize - 4, blockSize)
+ *                         indirectBlockId (uint32; NO_BLOCK if unused)
  * ```
+ *
+ * For files small enough to fit, every data block ID lives directly in
+ * the inode (the "direct" array). Once a file grows past
+ * `maxDirectBlocks()`, an extra **indirect block** is allocated; its
+ * entire contents are a packed array of `uint32` data block IDs (so an
+ * indirect block holds `blockSize / 4` more pointers). With 4 KiB
+ * blocks that's 1018 direct + 1024 indirect = 2042 blocks ≈ 8 MiB max
+ * file size before doubly-indirect (a future step) becomes necessary.
  */
 export class KvINodeFile extends INode<Uint8Array> {
     public static readonly OFFSET_SIZE = INode.HEADER_SIZE; // 16
     public static readonly OFFSET_DATA_BLOCK_IDS = INode.HEADER_SIZE + 8; // 24
     public static readonly DATA_BLOCK_ID_SIZE = 4;
+    public static readonly INDIRECT_FOOTER_BYTES = 4;
+    public static readonly NO_BLOCK = 0xFFFFFFFF;
 
     public size = 0;
 
     private dataBlockIds: INodeId[] = [];
+    /** Block holding the overflow data-block-id list, or null if not allocated. */
+    private indirectBlockId: INodeId | null = null;
     private position = 0;
+
+    /** Number of data block IDs that fit directly in the inode block. */
+    public maxDirectBlocks(): number {
+        return Math.floor(
+            (this.blockDevice.getBlockSize() - KvINodeFile.OFFSET_DATA_BLOCK_IDS - KvINodeFile.INDIRECT_FOOTER_BYTES)
+            / KvINodeFile.DATA_BLOCK_ID_SIZE,
+        );
+    }
+
+    /** Number of data block IDs that fit in one indirect block (one uint32 per slot). */
+    public maxIndirectBlocks(): number {
+        return Math.floor(this.blockDevice.getBlockSize() / KvINodeFile.DATA_BLOCK_ID_SIZE);
+    }
 
     async init(): Promise<void> {
         await super.init();
@@ -29,14 +56,28 @@ export class KvINodeFile extends INode<Uint8Array> {
         this.size = Number(view.getBigUint64(KvINodeFile.OFFSET_SIZE));
 
         this.dataBlockIds = [];
+        const blockSize = this.blockDevice.getBlockSize();
+        const requiredBlocks = this.size === 0 ? 0 : Math.ceil(this.size / blockSize);
+        const maxDirect = this.maxDirectBlocks();
 
-        let sizeFromBlocks = 0;
-        let i = 0;
-        while (sizeFromBlocks < this.size) {
+        const directCount = Math.min(requiredBlocks, maxDirect);
+        for (let i = 0; i < directCount; i++) {
             const offset = KvINodeFile.OFFSET_DATA_BLOCK_IDS + i * KvINodeFile.DATA_BLOCK_ID_SIZE;
             this.dataBlockIds.push(view.getUint32(offset));
-            sizeFromBlocks += this.blockDevice.getBlockSize();
-            i++;
+        }
+
+        const storedIndirect = view.getUint32(blockSize - KvINodeFile.INDIRECT_FOOTER_BYTES);
+        this.indirectBlockId = storedIndirect === KvINodeFile.NO_BLOCK ? null : storedIndirect;
+
+        // Pull overflow IDs out of the indirect block if the file is big
+        // enough to need it.
+        if (requiredBlocks > maxDirect && this.indirectBlockId !== null) {
+            const indirectBuffer = await this.blockDevice.readBlock(this.indirectBlockId);
+            const indirectView = dataView(indirectBuffer);
+            const indirectCount = requiredBlocks - maxDirect;
+            for (let i = 0; i < indirectCount; i++) {
+                this.dataBlockIds.push(indirectView.getUint32(i * KvINodeFile.DATA_BLOCK_ID_SIZE));
+            }
         }
     }
 
@@ -185,6 +226,11 @@ export class KvINodeFile extends INode<Uint8Array> {
             await this.blockDevice.freeBlock(blockId);
         }
 
+        if (this.indirectBlockId !== null) {
+            await this.blockDevice.freeBlock(this.indirectBlockId);
+            this.indirectBlockId = null;
+        }
+
         await this.blockDevice.freeBlock(this.id);
 
         this.size = 0;
@@ -192,16 +238,6 @@ export class KvINodeFile extends INode<Uint8Array> {
         this.modificationTime = new Date();
     }
 
-    /**
-     * Resize the in-memory + on-device block list to match `length` bytes.
-     * Allocates and zero-fills new blocks on extend; frees trailing blocks on
-     * shrink and zeroes any bytes past the new EOF inside the last retained
-     * block (so a later extend within that block reads as zero).
-     *
-     * Does **not** update `modificationTime` or write the inode metadata —
-     * callers do that once after they've finished their own work, so we don't
-     * persist the inode block twice for one logical operation.
-     */
     private async resize(length: number): Promise<void> {
         const blockSize = this.blockDevice.getBlockSize();
         const requiredBlocks = length === 0 ? 0 : Math.ceil(length / blockSize);
@@ -233,19 +269,58 @@ export class KvINodeFile extends INode<Uint8Array> {
         this.size = length;
     }
 
-    /** Persist the inode block (timestamps, size, data-block-id list). */
+    /**
+     * Persist the inode block (timestamps, size, direct + indirect data block
+     * IDs). Allocates an indirect block on demand the first time the file
+     * grows past `maxDirectBlocks()`; frees it once the file shrinks back
+     * below that threshold.
+     */
     private async writeMetadata(): Promise<void> {
-        const buffer = new Uint8Array(this.blockDevice.getBlockSize());
+        const blockSize = this.blockDevice.getBlockSize();
+        const maxDirect = this.maxDirectBlocks();
+        const overflowCount = Math.max(0, this.dataBlockIds.length - maxDirect);
+
+        // Allocate the indirect block on demand — claim the slot with a
+        // zero-filled placeholder before any subsequent allocateBlock so
+        // we don't get the same ID back.
+        if (overflowCount > 0 && this.indirectBlockId === null) {
+            this.indirectBlockId = await this.blockDevice.allocateBlock();
+            await this.blockDevice.writeBlock(this.indirectBlockId, new Uint8Array(blockSize));
+        } else if (overflowCount === 0 && this.indirectBlockId !== null) {
+            await this.blockDevice.freeBlock(this.indirectBlockId);
+            this.indirectBlockId = null;
+        }
+
+        // Inode block: header + size + direct ids + indirect pointer.
+        const buffer = new Uint8Array(blockSize);
         const view = dataView(buffer);
         view.setBigUint64(INode.OFFSET_CREATION_TIME, BigInt(this.creationTime.getTime()));
         view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, BigInt(this.modificationTime.getTime()));
         view.setBigUint64(KvINodeFile.OFFSET_SIZE, BigInt(this.size));
 
-        for (let i = 0; i < this.dataBlockIds.length; i++) {
+        const directCount = Math.min(this.dataBlockIds.length, maxDirect);
+        for (let i = 0; i < directCount; i++) {
             view.setUint32(KvINodeFile.OFFSET_DATA_BLOCK_IDS + i * KvINodeFile.DATA_BLOCK_ID_SIZE, this.dataBlockIds[i]);
         }
+        view.setUint32(
+            blockSize - KvINodeFile.INDIRECT_FOOTER_BYTES,
+            this.indirectBlockId ?? KvINodeFile.NO_BLOCK,
+        );
 
         await this.blockDevice.writeBlock(this.id, buffer);
+
+        // Indirect block, if needed.
+        if (this.indirectBlockId !== null) {
+            const indirectBuffer = new Uint8Array(blockSize);
+            const indirectView = dataView(indirectBuffer);
+            for (let i = 0; i < overflowCount; i++) {
+                indirectView.setUint32(
+                    i * KvINodeFile.DATA_BLOCK_ID_SIZE,
+                    this.dataBlockIds[maxDirect + i],
+                );
+            }
+            await this.blockDevice.writeBlock(this.indirectBlockId, indirectBuffer);
+        }
     }
 
     public static async createEmptyFile(blockDevice: KvBlockDevice): Promise<KvINodeFile> {
@@ -258,10 +333,10 @@ export class KvINodeFile extends INode<Uint8Array> {
         view.setBigUint64(INode.OFFSET_CREATION_TIME, BigInt(creationTime.getTime()));
         view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, BigInt(modificationTime.getTime()));
         view.setBigUint64(KvINodeFile.OFFSET_SIZE, 0n);
-
-        // Zero the data-block-id area so a later init() doesn't read garbage.
-        // (`new Uint8Array` already starts zeroed; this is a defensive no-op
-        // that keeps intent visible.)
+        view.setUint32(
+            buffer.byteLength - KvINodeFile.INDIRECT_FOOTER_BYTES,
+            KvINodeFile.NO_BLOCK,
+        );
 
         await blockDevice.writeBlock(id, buffer);
 

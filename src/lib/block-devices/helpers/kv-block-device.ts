@@ -2,7 +2,7 @@ import { INodeId } from '../../inode';
 
 /**
  * Self-describing metadata about a block device. Sent over the wire by
- * `KvBlockDeviceExpressRouter`'s `GET /blocks` endpoint and read back by
+ * `KvBlockDeviceHttpRouter`'s `GET /blocks` endpoint and read back by
  * `KvBlockDeviceHttpClient.init()` so the client doesn't have to be told
  * the layout up front.
  *

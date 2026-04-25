@@ -1,5 +1,5 @@
 import {
-    KvBlockDeviceExpressRouter,
+    KvBlockDeviceHttpRouter,
     KvEncryptedBlockDevice,
     KvBlockDeviceSqlite3,
 } from '../lib/block-devices';
@@ -41,7 +41,7 @@ async function run() {
     // Create express router mapping HTTP endpoints to block device operations
 
     const router = express.Router();
-    const bdRouter = new KvBlockDeviceExpressRouter();
+    const bdRouter = new KvBlockDeviceHttpRouter();
     bdRouter.route(encryptedServerBlockDevice, router);
 
     // Start express app

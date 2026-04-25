@@ -6,7 +6,7 @@ import { Router } from 'express';
  * remotely over HTTP. `KvBlockDeviceHttpClient` speaks this same wire
  * protocol on the other side.
  */
-export class KvBlockDeviceExpressRouter {
+export class KvBlockDeviceHttpRouter {
     public route(blockDevice: KvBlockDevice, router: Router): void {
         router
             // GET /blocks — return self-describing device metadata so the

@@ -4,7 +4,7 @@ import { Init, KvError_BD_Overflow } from '../utils';
 
 /**
  * KvBlockDevice that delegates every operation to a remote
- * `KvBlockDeviceExpressRouter` over HTTP. Pure transport — no encryption
+ * `KvBlockDeviceHttpRouter` over HTTP. Pure transport — no encryption
  * is performed here. If you want encryption on the wire, wrap the
  * client with `KvEncryptedBlockDevice`.
  *

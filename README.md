@@ -11,7 +11,7 @@ It is a pet project. It is almost certainly full of bugs. Do not trust it with a
     - [`KvBlockDeviceMemory`](src/lib/block-devices/kv-block-device-memory.ts): blocks live in a `Map` in process memory. Ephemeral; great for tests, demos, browsers.
     - [`KvBlockDeviceFs`](src/lib/block-devices/kv-block-device-fs.ts): one file per block on the local filesystem.
     - [`KvBlockDeviceSqlite3`](src/lib/block-devices/kv-block-device-sqlite3.ts): one row per block in a SQLite database.
-    - [`KvBlockDeviceHttpClient`](src/lib/block-devices/kv-block-device-http-client.ts) + [`KvBlockDeviceExpressRouter`](src/lib/block-devices/kv-block-device-express-router.ts): talk to a remote block device over a small HTTP API.
+    - [`KvBlockDeviceHttpClient`](src/lib/block-devices/kv-block-device-http-client.ts) + [`KvBlockDeviceHttpRouter`](src/lib/block-devices/kv-block-device-http-router.ts): talk to a remote block device over a small HTTP API.
 - [**`KvEncryptedBlockDevice`**](src/lib/block-devices/kv-encrypted-block-device.ts) — a decorator that wraps any block device with transparent encryption. Pair it with one of:
     - [`KvEncryptionAES256XTSKey`](src/lib/encryption/kv-encryption-aes-256-xts-key.ts) — length-preserving (no padding, no stored IV); the block ID is used as the XTS tweak. The "real" disk-encryption mode.
     - [`KvEncryptionAES256CBCKey`](src/lib/encryption/kv-encryption-aes-256-cbc-key.ts) — random IV stored with each block, PKCS#7 padding. Adds 32 bytes of overhead per block.
@@ -39,7 +39,7 @@ Because the contract is so small, swapping the backing store is a one-line chang
 - `KvBlockDeviceMemory` — blocks live in a `Map` in process memory. Vanishes when the process exits.
 - `KvBlockDeviceFs` — one file per block on the local filesystem (`./data/0.txt`, `./data/1.txt`, …).
 - `KvBlockDeviceSqlite3` — one row per block in a SQLite table.
-- `KvBlockDeviceHttpClient` — every block operation becomes an HTTP request to a remote server. On the other side, `KvBlockDeviceExpressRouter` exposes any block device over HTTP, so you can stack a client against a remote server that's actually backed by SQLite or local files.
+- `KvBlockDeviceHttpClient` — every block operation becomes an HTTP request to a remote server. On the other side, `KvBlockDeviceHttpRouter` exposes any block device over HTTP, so you can stack a client against a remote server that's actually backed by SQLite or local files.
 
 Write your own — anything that satisfies the five operations is a valid backend.
 
@@ -67,7 +67,7 @@ Because every layer in the stack speaks the same `KvBlockDevice` language, you c
        ▼
   KvBlockDeviceHttpClient ──  serializes block ops over HTTP
                                   ⇅
-                          KvBlockDeviceExpressRouter (server)
+                          KvBlockDeviceHttpRouter (server)
                                   │
                                   ▼
                           KvBlockDeviceSqlite3       ──  blocks land in a SQLite row
@@ -142,7 +142,7 @@ All examples output the same thing.
 The simplest example is in `src/examples/example-memory.ts`. Start from there, read it and play around with it.
 
 For a more complex example, run `start-http-server` in a terminal and then `start-http-client` in another one.
-The HTTP server uses the express router in `src/lib/block-devices/kv-block-device-express-router.ts`
+The HTTP server uses the express router in `src/lib/block-devices/kv-block-device-http-router.ts`
 to map Block Device methods to HTTP endpoints. Note that both the client and the server implement encryption.
 This is redundant as it should only be in the client, but it's still good practice to encrypt data stored on servers.
 

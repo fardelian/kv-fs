@@ -1,4 +1,5 @@
 import { KvBlockDevice } from '../block-devices';
+import { dataView } from '../utils/bytes';
 
 export type INodeId = number;
 
@@ -16,9 +17,10 @@ export abstract class INode<DataType> {
 
     public async init(): Promise<void> {
         const buffer = await this.blockDevice.readBlock(this.id);
+        const view = dataView(buffer);
 
-        const creationTimeMs = buffer.readBigUInt64BE(0);
-        const modificationTimeMs = buffer.readBigUInt64BE(8);
+        const creationTimeMs = view.getBigUint64(0, false);
+        const modificationTimeMs = view.getBigUint64(8, false);
 
         this.creationTime = new Date(Number(creationTimeMs));
         this.modificationTime = new Date(Number(modificationTimeMs));

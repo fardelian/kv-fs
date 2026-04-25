@@ -1,5 +1,5 @@
 export interface KvEncryption {
-    encrypt(data: Buffer): Buffer;
+    encrypt(data: Uint8Array): Uint8Array;
 
-    decrypt(data: Buffer): Buffer;
+    decrypt(data: Uint8Array): Uint8Array;
 }

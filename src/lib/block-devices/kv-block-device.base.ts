@@ -11,9 +11,9 @@ export abstract class KvBlockDevice {
         return this.blockSize;
     }
 
-    public abstract readBlock(blockId: INodeId): Promise<Buffer>;
+    public abstract readBlock(blockId: INodeId): Promise<Uint8Array>;
 
-    public abstract writeBlock(blockId: INodeId, data: Buffer): Promise<void>;
+    public abstract writeBlock(blockId: INodeId, data: Uint8Array): Promise<void>;
 
     public abstract freeBlock(blockId: INodeId): Promise<void>;
 

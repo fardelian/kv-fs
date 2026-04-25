@@ -17,7 +17,7 @@ export class KvEncryptionPassword extends KvEncryptionKey {
         password: string,
         salt: string,
         iterations: number,
-    ): Buffer {
+    ): Uint8Array {
         return pbkdf2Sync(
             password,
             salt,

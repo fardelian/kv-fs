@@ -22,22 +22,22 @@ export class KvBlockDeviceFs extends KvBlockDevice {
     }
 
     @Init
-    public async readBlock(blockId: INodeId): Promise<Buffer> {
+    public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         const blockPath = this.getBlockPath(blockId);
 
         return fs.readFileSync(blockPath);
     }
 
     @Init
-    public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
+    public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
         if (data.length > this.getBlockSize()) {
             throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.getBlockSize()}" bytes.`);
         }
 
         const blockPath = this.getBlockPath(blockId);
 
-        const blockData = Buffer.alloc(this.getBlockSize());
-        data.copy(blockData);
+        const blockData = new Uint8Array(this.getBlockSize());
+        blockData.set(data);
 
         fs.writeFileSync(blockPath, blockData);
     }

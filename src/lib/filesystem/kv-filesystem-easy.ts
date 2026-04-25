@@ -41,13 +41,13 @@ export class KvFilesystemEasy {
     }
 
     @Init
-    public async readFile(pathName: string): Promise<Buffer> {
+    public async readFile(pathName: string): Promise<Uint8Array> {
         const file = await this.getFile(pathName);
         return await file.read();
     }
 
     @Init
-    public async writeFile(pathName: string, data: Buffer): Promise<void> {
+    public async writeFile(pathName: string, data: Uint8Array): Promise<void> {
         const file = await this.getFile(pathName);
         await file.write(data);
     }

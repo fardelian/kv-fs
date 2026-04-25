@@ -40,11 +40,11 @@ async function run() {
 
     const testPath1 = '/home/florin/test1.txt';
     const testFile1 = await easyFileSystem.createFile(testPath1);
-    await testFile1.write(Buffer.from('hello world'));
+    await testFile1.write(new TextEncoder().encode('hello world'));
 
     const testPath2 = '/home/florin/test2.txt';
     const testFile2 = await easyFileSystem.createFile(testPath2);
-    await testFile2.write(Buffer.from('and hello again'));
+    await testFile2.write(new TextEncoder().encode('and hello again'));
 
     // Read test files
 
@@ -52,8 +52,9 @@ async function run() {
     const testRead2 = await easyFileSystem.readFile(testPath2);
     const testDir = await easyFileSystem.getDirectory('/home/florin');
 
-    console.log('testRead1:', testRead1.toString());
-    console.log('testRead2:', testRead2.toString());
+    const decoder = new TextDecoder();
+    console.log('testRead1:', decoder.decode(testRead1));
+    console.log('testRead2:', decoder.decode(testRead2));
     console.log('testDir:', await testDir.read());
 
     const homeDir = await easyFileSystem.getDirectory('/home');

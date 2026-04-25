@@ -33,24 +33,24 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
 
     /** Read using GET /blocks/:blockId */
     @Init
-    public async readBlock(blockId: INodeId): Promise<Buffer> {
+    public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         const blockUrl = this.getBlockUrl(blockId);
         const res = await this.request(blockUrl);
         const resBody = await res.json() as { data: { blockData: number[] } };
 
-        const blockData = Buffer.from(resBody.data.blockData);
+        const blockData = Uint8Array.from(resBody.data.blockData);
         return this.encryption.decrypt(blockData);
     }
 
     /** Write using POST /blocks/:blockId */
     @Init
-    public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
+    public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
         if (data.length > this.getBlockSize()) {
             throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.getBlockSize()}" bytes.`);
         }
 
-        const blockData = Buffer.alloc(this.getBlockSize());
-        data.copy(blockData);
+        const blockData = new Uint8Array(this.getBlockSize());
+        blockData.set(data);
         const encryptedData = this.encryption.encrypt(blockData);
 
         const blockUrl = this.getBlockUrl(blockId);

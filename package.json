@@ -7,15 +7,20 @@
   "license": "PROPRIETARY",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "start-local-fs": "tsx src/examples/example-local-fs.ts",
     "start-sqlite": "tsx src/examples/example-sqlite.ts",
     "start-http-server": "tsx src/examples/example-http-server.ts",
     "start-http-client": "tsx src/examples/example-http-client.ts"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.4.0",
     "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
     "@types/sqlite3": "^5.1.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
     "typescript": "^6.0.3"
   },
   "dependencies": {

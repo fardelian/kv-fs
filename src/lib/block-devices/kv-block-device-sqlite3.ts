@@ -24,7 +24,7 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
     }
 
     @Init
-    public async readBlock(blockId: INodeId): Promise<Buffer> {
+    public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         return new Promise((resolve, reject) => {
             this.database.get(
                 'SELECT data FROM blocks WHERE id = ?', [blockId],
@@ -41,10 +41,12 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
     }
 
     @Init
-    public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
+    public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
+        // sqlite3 expects a Buffer for BLOB params; wrap as a zero-copy view.
+        const blob = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
         return new Promise<void>((resolve, reject) => {
             this.database.run(
-                `INSERT OR REPLACE INTO blocks (id, data) VALUES (?, ?)`, [blockId, data],
+                `INSERT OR REPLACE INTO blocks (id, data) VALUES (?, ?)`, [blockId, blob],
                 (err) => err ? reject(err) : resolve());
         });
     }

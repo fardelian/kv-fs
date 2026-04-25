@@ -23,7 +23,7 @@ export class KvBlockDeviceExpressRouter {
 
             .post('/blocks/:blockId', async (req, res) => {
                 const blockId = Number(req.params.blockId) | 0;
-                const data = Buffer.from(req.body.data.blockData);
+                const data = Uint8Array.from(req.body.data.blockData);
                 await blockDevice.writeBlock(blockId, data);
                 res.send({ data: null });
             })

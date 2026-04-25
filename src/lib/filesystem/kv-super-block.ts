@@ -1,5 +1,6 @@
 import { KvBlockDevice } from '../block-devices';
 import { INodeId } from '../inode';
+import { dataView } from '../utils/bytes';
 
 export class SuperBlock {
     private blockDevice: KvBlockDevice;
@@ -17,11 +18,12 @@ export class SuperBlock {
 
     public async init(): Promise<void> {
         const buffer = await this.blockDevice.readBlock(this.superBlockId);
+        const view = dataView(buffer);
 
-        this.totalBlocks = buffer.readInt32BE(0);
-        this.blockSize = buffer.readInt32BE(4);
-        this.totalInodes = buffer.readInt32BE(8);
-        this.rootDirectoryId = buffer.readInt32BE(12);
+        this.totalBlocks = view.getInt32(0, false);
+        this.blockSize = view.getInt32(4, false);
+        this.totalInodes = view.getInt32(8, false);
+        this.rootDirectoryId = view.getInt32(12, false);
     }
 
     public static async createSuperBlock(
@@ -31,12 +33,13 @@ export class SuperBlock {
         totalInodes: number,
         rootDirectory: INodeId,
     ): Promise<SuperBlock> {
-        const buffer = Buffer.alloc(blockDevice.getBlockSize());
+        const buffer = new Uint8Array(blockDevice.getBlockSize());
+        const view = dataView(buffer);
 
-        buffer.writeInt32BE(totalBlocks, 0);
-        buffer.writeInt32BE(blockDevice.getBlockSize(), 4);
-        buffer.writeInt32BE(totalInodes, 8);
-        buffer.writeInt32BE(rootDirectory, 12);
+        view.setInt32(0, totalBlocks, false);
+        view.setInt32(4, blockDevice.getBlockSize(), false);
+        view.setInt32(8, totalInodes, false);
+        view.setInt32(12, rootDirectory, false);
 
         await blockDevice.writeBlock(id, buffer);
 

@@ -14,10 +14,10 @@ function makeSuperBlockBuffer(
 ): Uint8Array {
     const buffer = new Uint8Array(BLOCK_SIZE);
     const view = dataView(buffer);
-    view.setInt32(0, capacityBytes);
-    view.setInt32(4, blockSize);
-    view.setInt32(8, totalInodes);
-    view.setInt32(12, rootDirectoryId);
+    view.setUint32(0, capacityBytes);
+    view.setUint32(4, blockSize);
+    view.setUint32(8, totalInodes);
+    view.setUint32(12, rootDirectoryId);
     return buffer;
 }
 
@@ -92,10 +92,10 @@ describe('SuperBlock', () => {
             expect(writtenBuffer.length).toBe(BLOCK_SIZE);
 
             const view = dataView(writtenBuffer);
-            expect(view.getInt32(0)).toBe(capacityBytes);
-            expect(view.getInt32(4)).toBe(BLOCK_SIZE);
-            expect(view.getInt32(8)).toBe(totalInodes);
-            expect(view.getInt32(12)).toBe(rootDirectoryId);
+            expect(view.getUint32(0)).toBe(capacityBytes);
+            expect(view.getUint32(4)).toBe(BLOCK_SIZE);
+            expect(view.getUint32(8)).toBe(totalInodes);
+            expect(view.getUint32(12)).toBe(rootDirectoryId);
         });
 
         it('uses the block device block size for the buffer', async () => {
@@ -107,7 +107,7 @@ describe('SuperBlock', () => {
 
             const [, writtenBuffer] = customBlockDevice.writeBlock.mock.calls[0];
             expect(writtenBuffer.length).toBe(customBlockSize);
-            expect(dataView(writtenBuffer).getInt32(4)).toBe(customBlockSize);
+            expect(dataView(writtenBuffer).getUint32(4)).toBe(customBlockSize);
         });
     });
 });

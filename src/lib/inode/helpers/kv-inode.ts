@@ -19,8 +19,8 @@ export abstract class INode<DataType> {
         const buffer = await this.blockDevice.readBlock(this.id);
         const view = dataView(buffer);
 
-        const creationTimeMs = view.getInt32(0);
-        const modificationTimeMs = view.getInt32(4);
+        const creationTimeMs = view.getUint32(0);
+        const modificationTimeMs = view.getUint32(4);
 
         this.creationTime = new Date(creationTimeMs);
         this.modificationTime = new Date(modificationTimeMs);

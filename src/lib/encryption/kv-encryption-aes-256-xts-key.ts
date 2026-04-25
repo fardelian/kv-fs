@@ -54,7 +54,7 @@ export class KvEncryptionAES256XTSKey extends KvEncryption {
     /** Encode the block ID as a 16-byte big-endian tweak. */
     private tweak(blockId: number): Uint8Array {
         const tweak = new Uint8Array(KvEncryptionAES256XTSKey.TWEAK_BYTES);
-        new DataView(tweak.buffer).setInt32(0, blockId);
+        new DataView(tweak.buffer).setUint32(0, blockId);
         return tweak;
     }
 

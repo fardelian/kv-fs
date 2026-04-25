@@ -5,43 +5,52 @@ import { Init, dataView, utf8Decode, utf8Encode, KvError_FS_NotFound, KvError_IN
 type DirectoryEntriesList = Map<string, INodeId>;
 
 /**
- * On-disk layout (all integers stored as int32; see review note about
- * signedness — to be revisited):
+ * On-disk layout (all on-disk integers are unsigned):
  *
  * **First block (the inode block, ID = `this.id`):**
  * ```
- *   [0..4)                          creationTime (ms)
- *   [4..8)                          modificationTime (ms)
- *   [8..12)                         numEntries (total across all chained blocks)
- *   [12 + i*ENTRY_STRIDE,           entry i (i in [0, firstBlockCapacity()))
- *    12 + i*ENTRY_STRIDE + 268)
- *   [blockSize - 4, blockSize)      nextBlockId, or -1 if no continuation
+ *   [0..4)                       creationTime  (uint32, ms)
+ *   [4..8)                       modificationTime (uint32, ms)
+ *   [8..12)                      numEntries (uint32, total across the chain)
+ *   [12..blockSize - 8)          packed entries (variable length each)
+ *   [blockSize - 8, blockSize - 4)
+ *                                entriesInThisBlock (uint32)
+ *   [blockSize - 4, blockSize)   nextBlockId (uint32, NO_NEXT_BLOCK if none)
  * ```
  *
- * **Continuation block (allocated on demand when entries exceed first block):**
+ * **Continuation block (allocated on demand when entries overflow):**
  * ```
- *   [i*ENTRY_STRIDE,                entry i (i in [0, continuationBlockCapacity()))
- *    i*ENTRY_STRIDE + 268)
- *   [blockSize - 4, blockSize)      nextBlockId, or -1 if no further continuation
+ *   [0..blockSize - 8)           packed entries (variable length each)
+ *   [blockSize - 8, blockSize - 4)
+ *                                entriesInThisBlock (uint32)
+ *   [blockSize - 4, blockSize)   nextBlockId (uint32, NO_NEXT_BLOCK if none)
  * ```
  *
- * **Entry layout (268 bytes, identical in first and continuation blocks):**
+ * **Entry layout (variable length):**
  * ```
- *   [0..1)        nameLength (1..255)
- *   [1..256)      UTF-8 name bytes (only first nameLength bytes are meaningful)
- *   [256..260)    iNodeId
- *   [260..268)    reserved padding
+ *   [0..2)                           nameLength (uint16, in UTF-8 bytes)
+ *   [2..2 + nameLength)              name bytes (UTF-8)
+ *   [2 + nameLength..6 + nameLength) iNodeId (uint32)
  * ```
+ *
+ * Entries are packed densely; there is no padding between them. A block's
+ * unused tail (between the last entry and the footer) is left zeroed. The
+ * `entriesInThisBlock` field is what tells the reader where real entries
+ * stop, so the zero tail isn't mis-parsed as a string of empty-name entries.
  */
 export class KvINodeDirectory extends INode<DirectoryEntriesList> {
-    public static readonly MAX_NAME_LENGTH = 255;
+    /** Names are at most 16 bits' worth of UTF-8 bytes. Practical limit is also bounded by block size. */
+    public static readonly MAX_NAME_LENGTH = 0xFFFF;
     public static readonly OFFSET_NUM_ENTRIES = 8;
-    public static readonly OFFSET_ENTRIES_PREFIX = 12;
-    /** Bytes per entry record on disk (1 length byte + 255 name bytes + 4 inode id + 8 padding). */
-    public static readonly ENTRY_STRIDE = 268;
-    /** Last 4 bytes of every block hold the next-block pointer; -1 means "no continuation". */
-    public static readonly NEXT_BLOCK_FOOTER_BYTES = 4;
-    public static readonly NO_NEXT_BLOCK = -1;
+    public static readonly OFFSET_FIRST_ENTRY = 12;
+    /** Per-entry overhead: 2 bytes for `uint16` name length + 4 bytes for `uint32` iNodeId. */
+    public static readonly ENTRY_OVERHEAD_BYTES = 2 + 4;
+    /** Last 8 bytes of every block: 4 bytes per-block entry count + 4 bytes next-block pointer. */
+    public static readonly FOOTER_BYTES = 8;
+    public static readonly FOOTER_OFFSET_BLOCK_ENTRY_COUNT_FROM_END = 8;
+    public static readonly FOOTER_OFFSET_NEXT_BLOCK_FROM_END = 4;
+    /** Sentinel value stored at the next-block pointer when no continuation exists. */
+    public static readonly NO_NEXT_BLOCK = 0xFFFFFFFF;
 
     private entries: DirectoryEntriesList = new Map();
     /** Continuation blocks holding overflow entries, in chain order. Excludes `this.id`. */
@@ -52,35 +61,35 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
 
         const firstBuffer = await this.blockDevice.readBlock(this.id);
         const firstView = dataView(firstBuffer);
-        const numEntries = firstView.getInt32(KvINodeDirectory.OFFSET_NUM_ENTRIES);
+        const totalEntries = firstView.getUint32(KvINodeDirectory.OFFSET_NUM_ENTRIES);
 
-        const cap1 = this.firstBlockCapacity();
-        const cap2 = this.continuationBlockCapacity();
+        // First block: read header, then walk N entries where N is the
+        // first block's per-block count, then follow the chain.
+        const inFirstBlock = firstView.getUint32(
+            firstBuffer.byteLength - KvINodeDirectory.FOOTER_OFFSET_BLOCK_ENTRY_COUNT_FROM_END,
+        );
+        this.parseEntriesInto(firstBuffer, KvINodeDirectory.OFFSET_FIRST_ENTRY, inFirstBlock);
+        let parsedCount = inFirstBlock;
 
-        const inFirst = Math.min(numEntries, cap1);
-        for (let i = 0; i < inFirst; i++) {
-            this.parseEntryInto(
-                firstBuffer,
-                KvINodeDirectory.OFFSET_ENTRIES_PREFIX + i * KvINodeDirectory.ENTRY_STRIDE,
-            );
-        }
+        let nextBlockId = firstView.getUint32(
+            firstBuffer.byteLength - KvINodeDirectory.FOOTER_OFFSET_NEXT_BLOCK_FROM_END,
+        );
 
-        let entriesRead = inFirst;
-        let nextBlockId = firstView.getInt32(firstBuffer.byteLength - KvINodeDirectory.NEXT_BLOCK_FOOTER_BYTES);
-
-        while (nextBlockId !== KvINodeDirectory.NO_NEXT_BLOCK && entriesRead < numEntries) {
+        while (parsedCount < totalEntries && nextBlockId !== KvINodeDirectory.NO_NEXT_BLOCK) {
             this.continuationBlockIds.push(nextBlockId);
 
             const buffer = await this.blockDevice.readBlock(nextBlockId);
             const view = dataView(buffer);
 
-            const inThisBlock = Math.min(numEntries - entriesRead, cap2);
-            for (let i = 0; i < inThisBlock; i++) {
-                this.parseEntryInto(buffer, i * KvINodeDirectory.ENTRY_STRIDE);
-            }
-            entriesRead += inThisBlock;
+            const inThisBlock = view.getUint32(
+                buffer.byteLength - KvINodeDirectory.FOOTER_OFFSET_BLOCK_ENTRY_COUNT_FROM_END,
+            );
+            this.parseEntriesInto(buffer, 0, inThisBlock);
+            parsedCount += inThisBlock;
 
-            nextBlockId = view.getInt32(buffer.byteLength - KvINodeDirectory.NEXT_BLOCK_FOOTER_BYTES);
+            nextBlockId = view.getUint32(
+                buffer.byteLength - KvINodeDirectory.FOOTER_OFFSET_NEXT_BLOCK_FROM_END,
+            );
         }
     }
 
@@ -94,25 +103,49 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         this.entries = newEntries;
         this.modificationTime = new Date();
 
-        const entriesArr = Array.from(this.entries);
+        const blockSize = this.blockDevice.getBlockSize();
+        const firstBlockEntryArea = blockSize
+            - KvINodeDirectory.OFFSET_FIRST_ENTRY
+            - KvINodeDirectory.FOOTER_BYTES;
+        const continuationEntryArea = blockSize - KvINodeDirectory.FOOTER_BYTES;
 
-        for (const [name] of entriesArr) {
+        // Validate every name and pre-compute its UTF-8 encoding so we don't
+        // re-encode in the planning pass below.
+        const encoded: { name: string; nameBytes: Uint8Array; iNodeId: INodeId; entrySize: number }[] = [];
+        for (const [name, iNodeId] of this.entries) {
             const nameBytes = utf8Encode(name);
             if (nameBytes.length > KvINodeDirectory.MAX_NAME_LENGTH) {
                 throw new KvError_INode_NameOverflow(`INode name "${name}" length "${nameBytes.length}" exceeds maximum length "${KvINodeDirectory.MAX_NAME_LENGTH}".`);
             }
+            const entrySize = KvINodeDirectory.ENTRY_OVERHEAD_BYTES + nameBytes.length;
+            // A single entry must fit inside one (continuation) block —
+            // entries are not split across blocks. The first block has less
+            // room than a continuation thanks to its 12-byte header, but the
+            // planning loop below moves oversize-for-first-block entries to a
+            // continuation, so the relevant bound is the larger one.
+            if (entrySize > continuationEntryArea) {
+                throw new KvError_INode_NameOverflow(`INode entry "${name}" needs ${entrySize} bytes but a single block can only hold ${continuationEntryArea} bytes of entries.`);
+            }
+            encoded.push({ name, nameBytes, iNodeId, entrySize });
         }
 
-        const blockSize = this.blockDevice.getBlockSize();
-        const cap1 = this.firstBlockCapacity();
-        const cap2 = this.continuationBlockCapacity();
-        const inFirst = Math.min(entriesArr.length, cap1);
-        const overflow = entriesArr.length - inFirst;
-        const requiredContinuationBlocks = overflow > 0 ? Math.ceil(overflow / cap2) : 0;
+        // Plan: pack entries into blocks front-to-back, spilling into a new
+        // block whenever the next entry would overflow the current one.
+        const blocks: typeof encoded[] = [[]];
+        let currentBlockBytesAvailable = firstBlockEntryArea;
+        for (const entry of encoded) {
+            if (entry.entrySize > currentBlockBytesAvailable) {
+                blocks.push([]);
+                currentBlockBytesAvailable = continuationEntryArea;
+            }
+            blocks[blocks.length - 1].push(entry);
+            currentBlockBytesAvailable -= entry.entrySize;
+        }
 
-        // Reconcile chain length: allocate fresh blocks if growing, free
-        // trailing blocks if shrinking. Each newly allocated block is
-        // immediately claimed with a zero-filled placeholder so subsequent
+        const requiredContinuationBlocks = blocks.length - 1;
+
+        // Reconcile chain length. Each newly allocated block is claimed
+        // immediately with a zero-filled placeholder so subsequent
         // allocateBlock() calls don't hand back the same ID before the real
         // content is written below. (Mirrors KvINodeFile.resize.)
         while (this.continuationBlockIds.length < requiredContinuationBlocks) {
@@ -125,41 +158,43 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
             await this.blockDevice.freeBlock(id);
         }
 
-        const firstBuffer = new Uint8Array(blockSize);
-        const firstView = dataView(firstBuffer);
-        firstView.setInt32(0, this.creationTime.getTime());
-        firstView.setInt32(4, this.modificationTime.getTime());
-        firstView.setInt32(8, this.entries.size);
-        for (let i = 0; i < inFirst; i++) {
-            this.serializeEntryInto(
-                firstBuffer,
-                KvINodeDirectory.OFFSET_ENTRIES_PREFIX + i * KvINodeDirectory.ENTRY_STRIDE,
-                entriesArr[i],
-            );
-        }
-        firstView.setInt32(
-            blockSize - KvINodeDirectory.NEXT_BLOCK_FOOTER_BYTES,
-            this.continuationBlockIds[0] ?? KvINodeDirectory.NO_NEXT_BLOCK,
-        );
-        await this.blockDevice.writeBlock(this.id, firstBuffer);
-
-        let entryIdx = inFirst;
-        for (let b = 0; b < this.continuationBlockIds.length; b++) {
+        // Serialize each block.
+        for (let blockIdx = 0; blockIdx < blocks.length; blockIdx++) {
             const buffer = new Uint8Array(blockSize);
             const view = dataView(buffer);
 
-            const inThisBlock = Math.min(entriesArr.length - entryIdx, cap2);
-            for (let i = 0; i < inThisBlock; i++) {
-                this.serializeEntryInto(buffer, i * KvINodeDirectory.ENTRY_STRIDE, entriesArr[entryIdx + i]);
+            let offset: number;
+            if (blockIdx === 0) {
+                view.setUint32(0, this.creationTime.getTime());
+                view.setUint32(4, this.modificationTime.getTime());
+                view.setUint32(KvINodeDirectory.OFFSET_NUM_ENTRIES, this.entries.size);
+                offset = KvINodeDirectory.OFFSET_FIRST_ENTRY;
+            } else {
+                offset = 0;
             }
-            entryIdx += inThisBlock;
 
-            view.setInt32(
-                blockSize - KvINodeDirectory.NEXT_BLOCK_FOOTER_BYTES,
-                this.continuationBlockIds[b + 1] ?? KvINodeDirectory.NO_NEXT_BLOCK,
+            for (const entry of blocks[blockIdx]) {
+                view.setUint16(offset, entry.nameBytes.length);
+                buffer.set(entry.nameBytes, offset + 2);
+                view.setUint32(offset + 2 + entry.nameBytes.length, entry.iNodeId);
+                offset += entry.entrySize;
+            }
+
+            // Footer: per-block entry count, then next-block pointer.
+            view.setUint32(
+                blockSize - KvINodeDirectory.FOOTER_OFFSET_BLOCK_ENTRY_COUNT_FROM_END,
+                blocks[blockIdx].length,
+            );
+            const nextBlockId = blockIdx + 1 < blocks.length
+                ? this.continuationBlockIds[blockIdx]
+                : KvINodeDirectory.NO_NEXT_BLOCK;
+            view.setUint32(
+                blockSize - KvINodeDirectory.FOOTER_OFFSET_NEXT_BLOCK_FROM_END,
+                nextBlockId,
             );
 
-            await this.blockDevice.writeBlock(this.continuationBlockIds[b], buffer);
+            const targetBlockId = blockIdx === 0 ? this.id : this.continuationBlockIds[blockIdx - 1];
+            await this.blockDevice.writeBlock(targetBlockId, buffer);
         }
     }
 
@@ -192,11 +227,15 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     public static async createEmptyDirectory(blockDevice: KvBlockDevice, blockId: INodeId): Promise<KvINodeDirectory> {
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
-        view.setInt32(0, Date.now());
-        view.setInt32(4, Date.now());
-        view.setInt32(8, 0);
-        view.setInt32(
-            buffer.byteLength - KvINodeDirectory.NEXT_BLOCK_FOOTER_BYTES,
+        view.setUint32(0, Date.now());
+        view.setUint32(4, Date.now());
+        view.setUint32(KvINodeDirectory.OFFSET_NUM_ENTRIES, 0);
+        view.setUint32(
+            buffer.byteLength - KvINodeDirectory.FOOTER_OFFSET_BLOCK_ENTRY_COUNT_FROM_END,
+            0,
+        );
+        view.setUint32(
+            buffer.byteLength - KvINodeDirectory.FOOTER_OFFSET_NEXT_BLOCK_FROM_END,
             KvINodeDirectory.NO_NEXT_BLOCK,
         );
 
@@ -208,42 +247,16 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         return directory;
     }
 
-    /** Number of entries that fit in the first (inode) block. */
-    private firstBlockCapacity(): number {
-        return Math.floor(
-            (this.blockDevice.getBlockSize()
-                - KvINodeDirectory.OFFSET_ENTRIES_PREFIX
-                - KvINodeDirectory.NEXT_BLOCK_FOOTER_BYTES)
-            / KvINodeDirectory.ENTRY_STRIDE,
-        );
-    }
-
-    /** Number of entries that fit in a continuation block (no header, just entries + footer). */
-    private continuationBlockCapacity(): number {
-        return Math.floor(
-            (this.blockDevice.getBlockSize() - KvINodeDirectory.NEXT_BLOCK_FOOTER_BYTES)
-            / KvINodeDirectory.ENTRY_STRIDE,
-        );
-    }
-
-    private parseEntryInto(buffer: Uint8Array, baseOffset: number): void {
+    /** Parse `count` packed entries starting at `startOffset` into `this.entries`. */
+    private parseEntriesInto(buffer: Uint8Array, startOffset: number, count: number): void {
         const view = dataView(buffer);
-        // Name length is unsigned: MAX_NAME_LENGTH is 255, which doesn't fit
-        // in a signed int8 (−128..127). Reading via getInt8 would sign-extend
-        // any length ≥128 to a negative number and corrupt the name.
-        const nameLength = view.getUint8(baseOffset);
-        const nameStart = baseOffset + 1;
-        const name = utf8Decode(buffer, nameStart, nameStart + nameLength);
-        const iNodeId = view.getInt32(baseOffset + 1 + KvINodeDirectory.MAX_NAME_LENGTH);
-        this.entries.set(name, iNodeId);
-    }
-
-    private serializeEntryInto(buffer: Uint8Array, baseOffset: number, entry: [string, INodeId]): void {
-        const [name, iNodeId] = entry;
-        const view = dataView(buffer);
-        const nameBytes = utf8Encode(name);
-        view.setUint8(baseOffset, nameBytes.length);
-        buffer.set(nameBytes, baseOffset + 1);
-        view.setInt32(baseOffset + 1 + KvINodeDirectory.MAX_NAME_LENGTH, iNodeId);
+        let offset = startOffset;
+        for (let i = 0; i < count; i++) {
+            const nameLength = view.getUint16(offset);
+            const name = utf8Decode(buffer, offset + 2, offset + 2 + nameLength);
+            const iNodeId = view.getUint32(offset + 2 + nameLength);
+            this.entries.set(name, iNodeId);
+            offset += KvINodeDirectory.ENTRY_OVERHEAD_BYTES + nameLength;
+        }
     }
 }

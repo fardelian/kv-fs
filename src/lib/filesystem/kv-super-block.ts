@@ -20,10 +20,10 @@ export class SuperBlock {
         const buffer = await this.blockDevice.readBlock(this.superBlockId);
         const view = dataView(buffer);
 
-        this.capacityBytes = view.getInt32(0);
-        this.blockSize = view.getInt32(4);
-        this.totalInodes = view.getInt32(8);
-        this.rootDirectoryId = view.getInt32(12);
+        this.capacityBytes = view.getUint32(0);
+        this.blockSize = view.getUint32(4);
+        this.totalInodes = view.getUint32(8);
+        this.rootDirectoryId = view.getUint32(12);
     }
 
     public static async createSuperBlock(
@@ -37,10 +37,10 @@ export class SuperBlock {
 
         // capacityBytes comes straight off the device — the filesystem
         // doesn't get to override it.
-        view.setInt32(0, blockDevice.getCapacityBytes());
-        view.setInt32(4, blockDevice.getBlockSize());
-        view.setInt32(8, totalInodes);
-        view.setInt32(12, rootDirectory);
+        view.setUint32(0, blockDevice.getCapacityBytes());
+        view.setUint32(4, blockDevice.getBlockSize());
+        view.setUint32(8, totalInodes);
+        view.setUint32(12, rootDirectory);
 
         await blockDevice.writeBlock(id, buffer);
 

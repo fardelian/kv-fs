@@ -1,6 +1,6 @@
 # kv-fs
 
-A tiny filesystem you can lay on top of any kind of block storage. Backends are swappable — local disk, SQLite, an HTTP server — and any of them can be wrapped in transparent encryption. Built in TypeScript for fun, mostly to see how a hand-rolled superblock / inode / data-block layout actually feels in practice.
+A tiny filesystem you can lay on top of any kind of block storage. Backends are swappable — in-memory, local disk, SQLite, an HTTP server — and any of them can be wrapped in transparent encryption. Built in TypeScript for fun, mostly to see how a hand-rolled superblock / inode / data-block layout actually feels in practice.
 
 It is a pet project. It is almost certainly full of bugs. Do not trust it with anything you would miss.
 
@@ -8,6 +8,7 @@ It is a pet project. It is almost certainly full of bugs. Do not trust it with a
 
 - [**`KvBlockDevice`**](src/lib/block-devices/kv-block-device.base.ts) — the storage interface: `readBlock`, `writeBlock`, `freeBlock`, `existsBlock`, `allocateBlock`. Implement this and you have a new backend.
 - **Backends** —
+    - [`KvBlockDeviceMemory`](src/lib/block-devices/kv-block-device-memory.ts): blocks live in a `Map` in process memory. Ephemeral; great for tests, demos, browsers.
     - [`KvBlockDeviceFs`](src/lib/block-devices/kv-block-device-fs.ts): one file per block on the local filesystem.
     - [`KvBlockDeviceSqlite3`](src/lib/block-devices/kv-block-device-sqlite3.ts): one row per block in a SQLite database.
     - [`KvBlockDeviceHttpClient`](src/lib/block-devices/kv-block-device-http-client.ts) + [`KvBlockDeviceExpressRouter`](src/lib/block-devices/kv-block-device-express-router.ts): talk to a remote block device over a small HTTP API.
@@ -31,6 +32,7 @@ That's the entire contract. Everything above it works in terms of "give me block
 
 Because the contract is so small, swapping the backing store is a one-line change at the top of the program. The same `KvFilesystem` that ran on a local-disk block device runs unchanged on top of:
 
+- `KvBlockDeviceMemory` — blocks live in a `Map` in process memory. Vanishes when the process exits.
 - `KvBlockDeviceFs` — one file per block on the local filesystem (`./data/0.txt`, `./data/1.txt`, …).
 - `KvBlockDeviceSqlite3` — one row per block in a SQLite table.
 - `KvBlockDeviceHttpClient` — every block operation becomes an HTTP request to a remote server. On the other side, `KvBlockDeviceExpressRouter` exposes any block device over HTTP, so you can stack a client against a remote server that's actually backed by SQLite or local files.
@@ -41,7 +43,16 @@ Write your own — anything that satisfies the five operations is a valid backen
 
 `KvEncryptedBlockDevice` *is itself a block device*. On write it takes a block, encrypts it, and hands it to a wrapped block device. On read it fetches from that wrapped device, decrypts, and returns. The filesystem on top has no idea encryption is happening — it just sees a normal block device that happens to scramble bytes in transit.
 
-Because every layer in the stack speaks the same `KvBlockDevice` language, you can compose them freely:
+The simplest stack is one block device:
+
+```
+  KvFilesystem
+       │
+       ▼
+  KvBlockDeviceMemory  ──  blocks live in a Map; gone on process exit
+```
+
+Because every layer in the stack speaks the same `KvBlockDevice` language, you can compose them freely. A heavier stack might swap the backing store, add encryption, and go over the network:
 
 ```
   KvFilesystem
@@ -79,6 +90,7 @@ That's the whole model. Reading a directory means reading its inode block and pa
 ```bash
 npm install
 
+npm run start-memory       # filesystem in process memory (no disk)
 npm run start-local-fs     # filesystem backed by local disk
 npm run start-sqlite       # filesystem backed by a SQLite database
 npm run start-http-server  # serve a block device over HTTP

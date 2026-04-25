@@ -16,8 +16,6 @@ describe('KvBlockDevice (base)', () => {
             const device = new MockBlockDevice(blockSize);
 
             expect(device.getBlockSize()).toBe(blockSize);
-            expect(device.getBlockSize()).toBe(blockSize);
-            expect(device.getBlockSize()).toBe(blockSize);
         });
 
         it('keeps each instance independent', () => {

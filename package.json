@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "start-local-fs": "tsx src/examples/example-local-fs.ts",
+    "start-memory": "tsx src/examples/example-memory.ts",
     "start-sqlite": "tsx src/examples/example-sqlite.ts",
     "start-http-server": "tsx src/examples/example-http-server.ts",
     "start-http-client": "tsx src/examples/example-http-client.ts"

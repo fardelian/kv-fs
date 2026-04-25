@@ -36,5 +36,8 @@
     "express-router": "0.0.1",
     "promised-sqlite3": "2.1.0",
     "tsx": "4.21.0"
+  },
+  "overrides": {
+    "sqlite3": "6.0.1"
   }
 }

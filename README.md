@@ -20,7 +20,7 @@ It is a pet project. It is almost certainly full of bugs. Do not trust it with a
 
 The filesystem only ever talks to one abstraction: the **block device**. A block device is a flat array of fixed-size blocks addressed by integer IDs, with a handful of operations:
 
-- `readBlock(id) → Buffer`
+- `readBlock(id) → Uint8Array`
 - `writeBlock(id, data)`
 - `freeBlock(id)`
 - `existsBlock(id) → boolean`

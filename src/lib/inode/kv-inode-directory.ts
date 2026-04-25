@@ -13,10 +13,6 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
 
     private entries: DirectoryEntriesList = new Map();
 
-    constructor(blockDevice: KvBlockDevice, id: INodeId) {
-        super(blockDevice, id);
-    }
-
     protected async init(): Promise<void> {
         await super.init();
 

@@ -1,14 +1,14 @@
 import { KvError_Init_Recursion } from './errors';
 
 interface HasInit {
-    init(): Promise<void>;
+    init?(): Promise<void>;
 }
 
 const inflight = new WeakMap<object, Promise<unknown>>();
 
-const ready = new WeakSet<object>();
+const ready = new WeakSet();
 
-export function Init<This extends object, Args extends any[], Return>(
+export function Init<This extends object, Args extends unknown[], Return>(
     target: (this: This, ...args: Args) => Promise<Return>,
     ctx: ClassMethodDecoratorContext<This, (this: This, ...args: Args) => Promise<Return>>,
 ) {
@@ -30,6 +30,6 @@ export function Init<This extends object, Args extends any[], Return>(
             await pending;
         }
 
-        return target.apply(this, args);
+        return await target.apply(this, args);
     };
 }

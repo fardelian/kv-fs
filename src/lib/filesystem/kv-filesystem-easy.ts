@@ -8,7 +8,7 @@ export class KvFilesystemEasy {
 
     constructor(
         filesystem: KvFilesystem,
-        separator: string = '/',
+        separator = '/',
     ) {
         this.filesystem = filesystem;
         this.separator = separator;
@@ -50,7 +50,7 @@ export class KvFilesystemEasy {
 
     // Directory operations
 
-    public async createDirectory(pathName: string, createPath: boolean = false): Promise<KvINodeDirectory> {
+    public async createDirectory(pathName: string, createPath = false): Promise<KvINodeDirectory> {
         const path = pathName.split(this.separator).slice(1);
         const directoryName = path.pop()!;
 

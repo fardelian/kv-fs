@@ -1,4 +1,4 @@
-import { KvEncryptionCaesar } from "./helpers/kv-encryption-caesar";
+import { KvEncryptionCaesar } from './helpers/kv-encryption-caesar';
 
 /**
  * The Caesar cipher with a shift of 13. Self-inverse — applying it twice

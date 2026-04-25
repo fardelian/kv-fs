@@ -6,9 +6,9 @@ export class SuperBlock {
     private blockDevice: KvBlockDevice;
     private superBlockId: INodeId;
 
-    public totalBlocks: number = 0;
-    public blockSize: number = 0;
-    public totalInodes: number = 0;
+    public totalBlocks = 0;
+    public blockSize = 0;
+    public totalInodes = 0;
     public rootDirectoryId: INodeId = 0;
 
     constructor(blockDevice: KvBlockDevice, superBlockId: INodeId) {

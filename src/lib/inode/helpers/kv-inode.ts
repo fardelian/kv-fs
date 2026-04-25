@@ -10,7 +10,7 @@ export abstract class INode<DataType> {
     public creationTime: Date = new Date(0);
     public modificationTime: Date = new Date(0);
 
-    protected constructor(blockDevice: KvBlockDevice, id: INodeId) {
+    constructor(blockDevice: KvBlockDevice, id: INodeId) {
         this.blockDevice = blockDevice;
         this.id = id;
     }

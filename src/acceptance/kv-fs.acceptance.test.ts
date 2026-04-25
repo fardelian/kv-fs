@@ -3,11 +3,16 @@ import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
 import { KvEncryptionRot13 } from '../lib/encryption';
+import { INodeId } from '../lib/inode';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
 const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
+
+interface PublicBlockDevice {
+    blocks: Map<INodeId, Uint8Array>;
+}
 
 async function makeFs(): Promise<KvFilesystemEasy> {
     const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
@@ -26,7 +31,7 @@ async function makeRot13Fs(): Promise<{ fs: KvFilesystemEasy; underlying: KvBloc
 
 /** Search every block of an in-memory device for the given byte sequence. */
 function anyBlockContains(device: KvBlockDeviceMemory, needle: Uint8Array): boolean {
-    const blocks = (device as unknown as { blocks: Map<number, Uint8Array> }).blocks;
+    const blocks = (device as unknown as PublicBlockDevice).blocks;
     for (const block of blocks.values()) {
         outer: for (let i = 0; i <= block.length - needle.length; i++) {
             for (let j = 0; j < needle.length; j++) {
@@ -76,7 +81,7 @@ describe('kv-fs (acceptance)', () => {
         expect(florin).toContain('note.txt');
     });
 
-    it('rewinds with setpos and writes over existing content', async () => {
+    it('rewinds with setPos and writes over existing content', async () => {
         const fs = await makeFs();
         await fs.createDirectory('/data', true);
 
@@ -131,10 +136,11 @@ describe('kv-fs (acceptance)', () => {
             const { fs, underlying } = await makeRot13Fs();
             await fs.createDirectory('/data', true);
 
-            // Pure-letters payload so every byte gets shifted (digits/punctuation
-            // would pass through and confuse the assertion).
-            const plaintext = 'helloworld';
-            const expectedCiphertext = 'uryybjbeyq'; // ROT13(plaintext)
+            // Letters get shifted; the space passes through unchanged, which is
+            // the point — it shows the cipher is genuinely byte-by-byte and
+            // doesn't accidentally mangle non-letter bytes.
+            const plaintext = 'hello world';
+            const expectedCiphertext = 'uryyb jbeyq'; // ROT13(plaintext)
 
             const file = await fs.createFile('/data/note.txt');
             await file.write(encoder.encode(plaintext));

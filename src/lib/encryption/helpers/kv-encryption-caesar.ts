@@ -1,4 +1,4 @@
-import { KvEncryption } from "./kv-encryption";
+import { KvEncryption } from './kv-encryption';
 
 /**
  * Caesar cipher: each letter (A-Z, a-z) is shifted by a configurable

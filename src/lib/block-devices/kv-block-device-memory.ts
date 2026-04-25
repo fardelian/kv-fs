@@ -6,10 +6,6 @@ import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils/errors';
 export class KvBlockDeviceMemory extends KvBlockDevice {
     private readonly blocks = new Map<INodeId, Uint8Array>();
 
-    constructor(blockSize: number, capacityBytes: number) {
-        super(blockSize, capacityBytes);
-    }
-
     public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         const block = this.blocks.get(blockId);
         if (!block) {

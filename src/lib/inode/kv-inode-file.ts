@@ -4,14 +4,10 @@ import { Init } from '../utils/init';
 import { dataView } from '../utils/bytes';
 
 export class KvINodeFile extends INode<Uint8Array> {
-    public size: number = 0;
+    public size = 0;
 
     private dataBlockIds: INodeId[] = [];
-    private position: number = 0;
-
-    constructor(blockDevice: KvBlockDevice, id: INodeId) {
-        super(blockDevice, id);
-    }
+    private position = 0;
 
     protected async init(): Promise<void> {
         await super.init();
@@ -67,7 +63,7 @@ export class KvINodeFile extends INode<Uint8Array> {
      *   subsequent writes will extend the file again).
      */
     @Init
-    public async truncate(length: number = 0): Promise<void> {
+    public async truncate(length = 0): Promise<void> {
         if (length < 0) {
             throw new Error(`Length must be non-negative; got ${length}.`);
         }
@@ -173,8 +169,8 @@ export class KvINodeFile extends INode<Uint8Array> {
 
     @Init
     public async unlink(): Promise<void> {
-        for (let i = 0; i < this.dataBlockIds.length; i++) {
-            await this.blockDevice.freeBlock(this.dataBlockIds[i]);
+        for (const blockId of this.dataBlockIds) {
+            await this.blockDevice.freeBlock(blockId);
         }
 
         await this.blockDevice.freeBlock(this.id);

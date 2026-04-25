@@ -4,7 +4,7 @@ export abstract class KvBlockDevice {
     protected blockSize: number;
     protected capacityBytes: number;
 
-    protected constructor(blockSize: number, capacityBytes: number) {
+    constructor(blockSize: number, capacityBytes: number) {
         this.blockSize = blockSize;
         this.capacityBytes = capacityBytes;
     }

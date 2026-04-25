@@ -21,8 +21,12 @@ async function run() {
     // Create backend block device (encrypted, using sqlite)
 
     const database = await new Promise<Database>((resolve, reject) => {
-        const db = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {
-            err ? reject(err) : resolve(db);
+        const db: Database = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(db);
+            }
         });
     });
 
@@ -46,7 +50,7 @@ async function run() {
     server.use(express.json());
     server.use(router);
 
-    return new Promise<void>((resolve) => {
+    await new Promise<void>((resolve) => {
         server.listen(PORT, () => {
             console.log(`Server is listening on :${PORT}`);
             resolve();

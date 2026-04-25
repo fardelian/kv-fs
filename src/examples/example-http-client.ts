@@ -1,6 +1,6 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
 import { KvBlockDeviceHttpClient } from '../lib/block-devices';
-import { KvEncryptionPassword } from "../lib/encryption/kv-encryption-password";
+import { KvEncryptionPassword } from '../lib/encryption/kv-encryption-password';
 
 const PORT = 3000;
 

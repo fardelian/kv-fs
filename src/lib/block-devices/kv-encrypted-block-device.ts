@@ -1,9 +1,9 @@
 import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
 import { KvError_BD_Overflow } from '../utils/errors';
-import { KvEncryption } from "../encryption";
+import { KvEncryption } from '../encryption';
 
-/** Wrap a KvBlockDevice with encryption. Also validates and ensures block size.*/
+/** Wrap a KvBlockDevice with encryption. Also validates and ensures block size. */
 export class KvEncryptedBlockDevice extends KvBlockDevice {
     private readonly blockDevice: KvBlockDevice;
     private readonly encryption: KvEncryption;
@@ -25,7 +25,7 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
     public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         const encryptedData = await this.blockDevice.readBlock(blockId);
 
-        return this.encryption.decrypt(encryptedData);
+        return await this.encryption.decrypt(encryptedData);
     }
 
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
@@ -37,18 +37,18 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
         blockData.set(data);
         const encryptedData = await this.encryption.encrypt(blockData);
 
-        return this.blockDevice.writeBlock(blockId, encryptedData);
+        await this.blockDevice.writeBlock(blockId, encryptedData);
     }
 
     public async freeBlock(blockId: INodeId): Promise<void> {
-        return this.blockDevice.freeBlock(blockId);
+        await this.blockDevice.freeBlock(blockId);
     }
 
     public async existsBlock(blockId: INodeId): Promise<boolean> {
-        return this.blockDevice.existsBlock(blockId);
+        return await this.blockDevice.existsBlock(blockId);
     }
 
     public async allocateBlock(): Promise<INodeId> {
-        return this.blockDevice.allocateBlock();
+        return await this.blockDevice.allocateBlock();
     }
 }

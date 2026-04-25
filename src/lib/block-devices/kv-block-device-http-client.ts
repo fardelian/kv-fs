@@ -1,7 +1,7 @@
 import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
 import { KvError_BD_Overflow } from '../utils/errors';
-import { KvEncryption } from "../encryption";
+import { KvEncryption } from '../encryption';
 
 /** KvBlockDevice which uses a remote HTTP server. */
 export class KvBlockDeviceHttpClient extends KvBlockDevice {
@@ -38,7 +38,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         const resBody = await res.json() as { data: { blockData: number[] } };
 
         const blockData = Uint8Array.from(resBody.data.blockData);
-        return this.encryption.decrypt(blockData);
+        return await this.encryption.decrypt(blockData);
     }
 
     /** Write using POST /blocks/:blockId */

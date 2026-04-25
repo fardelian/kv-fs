@@ -22,8 +22,12 @@ async function run() {
     const encryption = new KvEncryptionRot13();
 
     const database = await new Promise<Database>((resolve, reject) => {
-        const db = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {
-            err ? reject(err) : resolve(db);
+        const db: Database = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(db);
+            }
         });
     });
 

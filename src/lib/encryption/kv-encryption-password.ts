@@ -1,5 +1,5 @@
-import { KvEncryptionAES256CBCKey } from "./kv-encryption-aes-256-cbc-key";
-import { pbkdf2Sync } from "crypto";
+import { KvEncryptionAES256CBCKey } from './kv-encryption-aes-256-cbc-key';
+import { pbkdf2Sync } from 'crypto';
 
 export class KvEncryptionPassword extends KvEncryptionAES256CBCKey {
     // https://xkcd.com/221/

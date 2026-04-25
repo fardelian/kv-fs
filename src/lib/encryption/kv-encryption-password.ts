@@ -1,19 +1,21 @@
-import { pbkdf2Sync } from 'crypto';
-import { KvEncryptionKey } from './kv-encryption-key';
+import { KvEncryptionAES256CBCKey } from "./kv-encryption-aes-256-cbc-key";
+import { pbkdf2Sync } from "crypto";
 
-export class KvEncryptionPassword extends KvEncryptionKey {
-    protected static readonly ITERATIONS = 100000;
+export class KvEncryptionPassword extends KvEncryptionAES256CBCKey {
+    // https://xkcd.com/221/
+    protected static SALT = '9d103593-1cdc-436b-a09c-5636e15497d0';
 
     constructor(
         password: string,
-        salt: string,
-        iterations: number = KvEncryptionPassword.ITERATIONS,
+        salt: string = new.target.SALT,
+        iterations = 100_000,
     ) {
-        const key = KvEncryptionPassword.generateKeyFromPassword(password, salt, iterations);
-        super(key);
+        super();
+        const key = this.generateKeyFromPassword(password, salt, iterations);
+        this.setKey(key);
     }
 
-    public static generateKeyFromPassword(
+    protected generateKeyFromPassword(
         password: string,
         salt: string,
         iterations: number,
@@ -22,8 +24,8 @@ export class KvEncryptionPassword extends KvEncryptionKey {
             password,
             salt,
             iterations,
-            super.KEY_LENGTH_BYTES,
-            'sha512',
+            this.keyLengthBytes,
+            this.keyPasswordDigest,
         );
     }
 }

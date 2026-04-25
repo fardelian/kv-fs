@@ -1,7 +1,7 @@
-import { KvBlockDevice } from './kv-block-device.base';
+import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
-import { KvEncryption } from '../encryption';
 import { KvError_BD_Overflow } from '../utils/errors';
+import { KvEncryption } from "../encryption";
 
 /** KvBlockDevice which uses a remote HTTP server. */
 export class KvBlockDeviceHttpClient extends KvBlockDevice {
@@ -44,12 +44,12 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
     /** Write using POST /blocks/:blockId */
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
         if (data.length > this.getBlockSize()) {
-            throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.getBlockSize()}" bytes.`);
+            throw new KvError_BD_Overflow(data.length, this.getBlockSize());
         }
 
         const blockData = new Uint8Array(this.getBlockSize());
         blockData.set(data);
-        const encryptedData = this.encryption.encrypt(blockData);
+        const encryptedData = await this.encryption.encrypt(blockData);
 
         const blockUrl = this.getBlockUrl(blockId);
         await this.request(blockUrl, {

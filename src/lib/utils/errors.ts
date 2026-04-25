@@ -6,10 +6,16 @@ abstract class KvError extends Error {
     }
 }
 
-export class KvError_Init extends KvError {
+export class KvError_Init_Recursion extends KvError {
+    constructor() {
+        super('The "init" method cannot be decorated with @Init — that would cause infinite recursion.');
+    }
 }
 
 export class KvError_BD_Overflow extends KvError {
+    constructor(dataLengthBytes: number, blockSizeBytes: number) {
+        super(`Data size "${dataLengthBytes}" bytes exceeds block size "${blockSizeBytes}" bytes.`);
+    }
 }
 
 export class KvError_BD_NotFound extends KvError {

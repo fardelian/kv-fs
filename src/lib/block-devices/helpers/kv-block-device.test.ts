@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import { faker } from '@faker-js/faker';
-import { MockBlockDevice } from '../../mocks/kv-block-device.mock';
+import { MockBlockDevice } from '../../../mocks/kv-block-device.mock';
 
 describe('KvBlockDevice (base)', () => {
     describe('getBlockSize', () => {

@@ -1,7 +1,8 @@
 import { describe, it, expect } from '@jest/globals';
 import { faker } from '@faker-js/faker';
-import { KvBlockDeviceMemory } from '../lib/block-devices';
+import { KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvEncryptionRot13 } from '../lib/encryption';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -13,6 +14,28 @@ async function makeFs(): Promise<KvFilesystemEasy> {
     await KvFilesystem.format(blockDevice, TOTAL_BLOCKS, TOTAL_INODES);
     const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
     return new KvFilesystemEasy(filesystem, '/');
+}
+
+async function makeRot13Fs(): Promise<{ fs: KvFilesystemEasy; underlying: KvBlockDeviceMemory }> {
+    const underlying = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
+    const encrypted = new KvEncryptedBlockDevice(underlying, new KvEncryptionRot13());
+    await KvFilesystem.format(encrypted, TOTAL_BLOCKS, TOTAL_INODES);
+    const filesystem = new KvFilesystem(encrypted, SUPER_BLOCK_ID);
+    return { fs: new KvFilesystemEasy(filesystem, '/'), underlying };
+}
+
+/** Search every block of an in-memory device for the given byte sequence. */
+function anyBlockContains(device: KvBlockDeviceMemory, needle: Uint8Array): boolean {
+    const blocks = (device as unknown as { blocks: Map<number, Uint8Array> }).blocks;
+    for (const block of blocks.values()) {
+        outer: for (let i = 0; i <= block.length - needle.length; i++) {
+            for (let j = 0; j < needle.length; j++) {
+                if (block[i + j] !== needle[j]) continue outer;
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 const encoder = new TextEncoder();
@@ -83,5 +106,41 @@ describe('kv-fs (acceptance)', () => {
 
         await expect(fs.readFile(path)).rejects.toBeDefined();
         expect(await fs.readDirectory('/tmp')).not.toContain('disposable.txt');
+    });
+
+    describe('with KvEncryptionRot13 layered between the filesystem and the device', () => {
+        it('round-trips files transparently through the encryption layer', async () => {
+            const { fs } = await makeRot13Fs();
+
+            const content1 = faker.lorem.sentence();
+            const content2 = faker.lorem.sentence();
+
+            await fs.createDirectory('/home/florin', true);
+
+            const file1 = await fs.createFile('/home/florin/test1.txt');
+            await file1.write(encoder.encode(content1));
+
+            const file2 = await fs.createFile('/home/florin/test2.txt');
+            await file2.write(encoder.encode(content2));
+
+            expect(decoder.decode(await fs.readFile('/home/florin/test1.txt'))).toBe(content1);
+            expect(decoder.decode(await fs.readFile('/home/florin/test2.txt'))).toBe(content2);
+        });
+
+        it('stores the rot13-encoded form on the underlying device, not the plaintext', async () => {
+            const { fs, underlying } = await makeRot13Fs();
+            await fs.createDirectory('/data', true);
+
+            // Pure-letters payload so every byte gets shifted (digits/punctuation
+            // would pass through and confuse the assertion).
+            const plaintext = 'helloworld';
+            const expectedCiphertext = 'uryybjbeyq'; // ROT13(plaintext)
+
+            const file = await fs.createFile('/data/note.txt');
+            await file.write(encoder.encode(plaintext));
+
+            expect(anyBlockContains(underlying, encoder.encode(plaintext))).toBe(false);
+            expect(anyBlockContains(underlying, encoder.encode(expectedCiphertext))).toBe(true);
+        });
     });
 });

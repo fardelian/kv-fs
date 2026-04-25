@@ -1,4 +1,4 @@
-import { KvBlockDevice } from './kv-block-device.base';
+import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
 import { Database } from 'sqlite3';
 import { Init } from '../utils/init';
@@ -16,7 +16,7 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         this.database = dataBasePath;
     }
 
-    public async init(): Promise<void> {
+    protected async init(): Promise<void> {
         await new Promise<void>((resolve, reject) => {
             this.database.run(
                 'CREATE TABLE IF NOT EXISTS blocks (id INTEGER PRIMARY KEY, data BLOB)',

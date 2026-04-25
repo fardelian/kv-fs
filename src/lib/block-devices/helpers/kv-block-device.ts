@@ -1,4 +1,4 @@
-import { INodeId } from '../inode';
+import { INodeId } from '../../inode';
 
 export abstract class KvBlockDevice {
     protected blockSize: number;

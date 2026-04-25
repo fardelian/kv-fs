@@ -1,4 +1,4 @@
-import { INode, INodeId } from './kv-inode';
+import { INode, INodeId } from './helpers/kv-inode';
 import { KvBlockDevice } from '../block-devices';
 import { Init } from '../utils/init';
 import { dataView } from '../utils/bytes';
@@ -13,7 +13,7 @@ export class KvINodeFile extends INode<Uint8Array> {
         super(blockDevice, id);
     }
 
-    public async init(): Promise<void> {
+    protected async init(): Promise<void> {
         await super.init();
 
         const buffer = await this.blockDevice.readBlock(this.id);

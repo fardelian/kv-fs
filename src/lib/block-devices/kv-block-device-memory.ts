@@ -1,4 +1,4 @@
-import { KvBlockDevice } from './kv-block-device.base';
+import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
 import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils/errors';
 
@@ -20,7 +20,7 @@ export class KvBlockDeviceMemory extends KvBlockDevice {
 
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
         if (data.length > this.getBlockSize()) {
-            throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.getBlockSize()}" bytes.`);
+            throw new KvError_BD_Overflow(data.length, this.getBlockSize());
         }
 
         const blockData = new Uint8Array(this.getBlockSize());

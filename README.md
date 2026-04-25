@@ -6,13 +6,13 @@ It is a pet project. It is almost certainly full of bugs. Do not trust it with a
 
 ## What's in the box
 
-- [**`KvBlockDevice`**](src/lib/block-devices/kv-block-device.base.ts) — the storage interface: `readBlock`, `writeBlock`, `freeBlock`, `existsBlock`, `allocateBlock`. Implement this and you have a new backend.
+- [**`KvBlockDevice`**](src/lib/block-devices/helpers/kv-block-device.ts) — the storage interface: `readBlock`, `writeBlock`, `freeBlock`, `existsBlock`, `allocateBlock`. Implement this and you have a new backend.
 - **Backends** —
     - [`KvBlockDeviceMemory`](src/lib/block-devices/kv-block-device-memory.ts): blocks live in a `Map` in process memory. Ephemeral; great for tests, demos, browsers.
     - [`KvBlockDeviceFs`](src/lib/block-devices/kv-block-device-fs.ts): one file per block on the local filesystem.
     - [`KvBlockDeviceSqlite3`](src/lib/block-devices/kv-block-device-sqlite3.ts): one row per block in a SQLite database.
     - [`KvBlockDeviceHttpClient`](src/lib/block-devices/kv-block-device-http-client.ts) + [`KvBlockDeviceExpressRouter`](src/lib/block-devices/kv-block-device-express-router.ts): talk to a remote block device over a small HTTP API.
-- [**`KvEncryptedBlockDevice`**](src/lib/block-devices/kv-encrypted-block-device.ts) — a decorator that wraps any block device with transparent encryption. Pair it with [`KvEncryptionKey`](src/lib/encryption/kv-encryption-key.ts), [`KvEncryptionPassword`](src/lib/encryption/kv-encryption-password.ts), or [`KvEncryptionNone`](src/lib/encryption/kv-encryption-none.ts).
+- [**`KvEncryptedBlockDevice`**](src/lib/block-devices/kv-encrypted-block-device.ts) — a decorator that wraps any block device with transparent encryption. Pair it with [`KvEncryptionAES256CBCKey`](src/lib/encryption/kv-encryption-aes-256-cbc-key.ts), [`KvEncryptionPassword`](src/lib/encryption/kv-encryption-password.ts), or [`KvEncryptionRot13`](src/lib/encryption/kv-encryption-rot13.ts) (don't @ me).
 - [**`KvFilesystem`**](src/lib/filesystem/kv-filesystem.ts) — superblock, inodes ([file](src/lib/inode/kv-inode-file.ts) + [directory](src/lib/inode/kv-inode-directory.ts)), block allocation, format. Layered on top of any block device.
 - [**`KvFilesystemEasy`**](src/lib/filesystem/kv-filesystem-easy.ts) — path-style helpers (`createFile('/home/florin/note.txt')`, `readDirectory('/')`) so callers don't have to thread inodes around.
 

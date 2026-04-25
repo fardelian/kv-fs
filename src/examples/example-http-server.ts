@@ -3,7 +3,7 @@ import {
     KvEncryptedBlockDevice,
     KvBlockDeviceSqlite3,
 } from '../lib/block-devices';
-import { KvEncryptionNone } from '../lib/encryption';
+import { KvEncryptionRot13 } from '../lib/encryption';
 import express from 'express';
 import { mkdirSync } from 'fs';
 import { Database } from 'sqlite3';
@@ -16,7 +16,7 @@ const LOCAL_FS_PATH = `${__dirname}/../../data`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {
-    const encryption = new KvEncryptionNone();
+    const encryption = new KvEncryptionRot13();
 
     // Create backend block device (encrypted, using sqlite)
 

@@ -14,7 +14,7 @@ export class KvFilesystem {
         this.superBlockId = superBlockId;
     }
 
-    public async init(): Promise<void> {
+    protected async init(): Promise<void> {
         this.superBlock = new SuperBlock(this.blockDevice, this.superBlockId);
         await this.superBlock.init();
     }

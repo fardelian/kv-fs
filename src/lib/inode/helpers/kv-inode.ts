@@ -1,5 +1,5 @@
-import { KvBlockDevice } from '../block-devices';
-import { dataView } from '../utils/bytes';
+import { KvBlockDevice } from '../../block-devices';
+import { dataView } from '../../utils/bytes';
 
 export type INodeId = number;
 
@@ -15,7 +15,7 @@ export abstract class INode<DataType> {
         this.id = id;
     }
 
-    public async init(): Promise<void> {
+    protected async init(): Promise<void> {
         const buffer = await this.blockDevice.readBlock(this.id);
         const view = dataView(buffer);
 

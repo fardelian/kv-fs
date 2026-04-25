@@ -1,6 +1,6 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
 import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
-import { KvEncryptionNone } from '../lib/encryption';
+import { KvEncryptionRot13 } from '../lib/encryption';
 import { mkdirSync } from 'fs';
 import { KvEncryptedBlockDevice } from '../lib/block-devices';
 import { Database } from 'sqlite3';
@@ -19,7 +19,7 @@ async function run() {
 
     // Create encrypted block device
 
-    const encryption = new KvEncryptionNone();
+    const encryption = new KvEncryptionRot13();
 
     const database = await new Promise<Database>((resolve, reject) => {
         const db = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {

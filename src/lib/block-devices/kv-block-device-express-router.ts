@@ -1,4 +1,4 @@
-import { KvBlockDevice } from './kv-block-device.base';
+import { KvBlockDevice } from './helpers/kv-block-device';
 import { Router } from 'express';
 
 export class KvBlockDeviceExpressRouter {

@@ -1,6 +1,5 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
-import { KvBlockDevice, KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
-import { KvEncryptionNone } from '../lib/encryption';
+import { KvBlockDeviceMemory } from '../lib/block-devices';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;

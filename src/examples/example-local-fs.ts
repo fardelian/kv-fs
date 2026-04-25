@@ -1,6 +1,6 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
 import { KvBlockDeviceFs } from '../lib/block-devices';
-import { KvEncryptionNone } from '../lib/encryption';
+import { KvEncryptionRot13 } from '../lib/encryption';
 import { mkdirSync } from 'fs';
 import { KvEncryptedBlockDevice } from '../lib/block-devices';
 
@@ -18,7 +18,7 @@ async function run() {
 
     // Create encrypted block device
 
-    const encryption = new KvEncryptionNone();
+    const encryption = new KvEncryptionRot13();
 
     const fsBlockDevice = new KvBlockDeviceFs(
         BLOCK_SIZE,

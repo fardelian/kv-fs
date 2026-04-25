@@ -1,4 +1,4 @@
-import { KvError_Init } from './errors';
+import { KvError_Init_Recursion } from './errors';
 
 interface HasInit {
     init(): Promise<void>;
@@ -13,7 +13,7 @@ export function Init<This extends object, Args extends any[], Return>(
     ctx: ClassMethodDecoratorContext<This, (this: This, ...args: Args) => Promise<Return>>,
 ) {
     if (ctx.name === 'init') {
-        throw new KvError_Init('The "init" method cannot be decorated with @Init — that would cause infinite recursion.');
+        throw new KvError_Init_Recursion();
     }
 
     return async function (this: This, ...args: Args): Promise<Return> {

@@ -1,18 +1,17 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
-import { KvEncryptionPassword } from '../lib/encryption';
 import { KvBlockDeviceHttpClient } from '../lib/block-devices';
-
-const BLOCK_SIZE = 4096;
-const TOTAL_BLOCKS = 1000;
-const TOTAL_NODES = 100;
-
-const SUPER_BLOCK_ID = 0;
+import { KvEncryptionPassword } from "../lib/encryption/kv-encryption-password";
 
 const PORT = 3000;
 
 const ENC_PASSWORD = 'the_user_password';
 const ENC_SALT = 'some_static_secret';
 const ENC_ITERATIONS = 10;
+
+const BLOCK_SIZE = 4096;
+const TOTAL_BLOCKS = 1000;
+const TOTAL_NODES = 100;
+const SUPER_BLOCK_ID = 0;
 
 async function run() {
     // Create encrypted client

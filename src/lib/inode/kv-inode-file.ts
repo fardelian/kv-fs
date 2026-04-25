@@ -2,7 +2,19 @@ import { INode, INodeId } from './helpers/kv-inode';
 import { KvBlockDevice } from '../block-devices';
 import { Init, dataView } from '../utils';
 
+/**
+ * On-disk layout (extends `INode`'s 16-byte header):
+ * ```
+ *   [ 0..16)            creationTime + modificationTime  (see INode)
+ *   [16..24)            size  (uint64)
+ *   [24..)              data block IDs (uint32 each, packed densely)
+ * ```
+ */
 export class KvINodeFile extends INode<Uint8Array> {
+    public static readonly OFFSET_SIZE = INode.HEADER_SIZE; // 16
+    public static readonly OFFSET_DATA_BLOCK_IDS = INode.HEADER_SIZE + 8; // 24
+    public static readonly DATA_BLOCK_ID_SIZE = 4;
+
     public size = 0;
 
     private dataBlockIds: INodeId[] = [];
@@ -14,14 +26,15 @@ export class KvINodeFile extends INode<Uint8Array> {
         const buffer = await this.blockDevice.readBlock(this.id);
         const view = dataView(buffer);
 
-        this.size = view.getUint32(8);
+        this.size = Number(view.getBigUint64(KvINodeFile.OFFSET_SIZE));
 
         this.dataBlockIds = [];
 
         let sizeFromBlocks = 0;
         let i = 0;
         while (sizeFromBlocks < this.size) {
-            this.dataBlockIds.push(view.getUint32(12 + i * 4));
+            const offset = KvINodeFile.OFFSET_DATA_BLOCK_IDS + i * KvINodeFile.DATA_BLOCK_ID_SIZE;
+            this.dataBlockIds.push(view.getUint32(offset));
             sizeFromBlocks += this.blockDevice.getBlockSize();
             i++;
         }
@@ -224,12 +237,12 @@ export class KvINodeFile extends INode<Uint8Array> {
     private async writeMetadata(): Promise<void> {
         const buffer = new Uint8Array(this.blockDevice.getBlockSize());
         const view = dataView(buffer);
-        view.setUint32(0, this.creationTime.getTime());
-        view.setUint32(4, this.modificationTime.getTime());
-        view.setUint32(8, this.size);
+        view.setBigUint64(INode.OFFSET_CREATION_TIME, BigInt(this.creationTime.getTime()));
+        view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, BigInt(this.modificationTime.getTime()));
+        view.setBigUint64(KvINodeFile.OFFSET_SIZE, BigInt(this.size));
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
-            view.setUint32(12 + i * 4, this.dataBlockIds[i]);
+            view.setUint32(KvINodeFile.OFFSET_DATA_BLOCK_IDS + i * KvINodeFile.DATA_BLOCK_ID_SIZE, this.dataBlockIds[i]);
         }
 
         await this.blockDevice.writeBlock(this.id, buffer);
@@ -242,13 +255,13 @@ export class KvINodeFile extends INode<Uint8Array> {
 
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
-        view.setUint32(0, creationTime.getTime());
-        view.setUint32(4, modificationTime.getTime());
-        view.setUint32(8, 0);
+        view.setBigUint64(INode.OFFSET_CREATION_TIME, BigInt(creationTime.getTime()));
+        view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, BigInt(modificationTime.getTime()));
+        view.setBigUint64(KvINodeFile.OFFSET_SIZE, 0n);
 
-        for (let i = 0; i < (blockDevice.getBlockSize() - 12) / 4; i++) {
-            view.setUint32(12 + i * 4, 0);
-        }
+        // Zero the data-block-id area so a later init() doesn't read garbage.
+        // (`new Uint8Array` already starts zeroed; this is a defensive no-op
+        // that keeps intent visible.)
 
         await blockDevice.writeBlock(id, buffer);
 

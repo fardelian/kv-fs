@@ -16,7 +16,7 @@ function makeSuperBlockBuffer(
     const buffer = new Uint8Array(BLOCK_SIZE);
     const view = dataView(buffer);
     view.setUint32(SuperBlock.OFFSET_FORMAT_VERSION, formatVersion);
-    view.setUint32(SuperBlock.OFFSET_CAPACITY_BYTES, capacityBytes);
+    view.setBigUint64(SuperBlock.OFFSET_CAPACITY_BYTES, BigInt(capacityBytes));
     view.setUint32(SuperBlock.OFFSET_BLOCK_SIZE, blockSize);
     view.setUint32(SuperBlock.OFFSET_TOTAL_INODES, totalInodes);
     view.setUint32(SuperBlock.OFFSET_ROOT_DIRECTORY_ID, rootDirectoryId);
@@ -102,7 +102,7 @@ describe('SuperBlock', () => {
 
             const view = dataView(writtenBuffer);
             expect(view.getUint32(SuperBlock.OFFSET_FORMAT_VERSION)).toBe(SuperBlock.FORMAT_VERSION);
-            expect(view.getUint32(SuperBlock.OFFSET_CAPACITY_BYTES)).toBe(capacityBytes);
+            expect(Number(view.getBigUint64(SuperBlock.OFFSET_CAPACITY_BYTES))).toBe(capacityBytes);
             expect(view.getUint32(SuperBlock.OFFSET_BLOCK_SIZE)).toBe(BLOCK_SIZE);
             expect(view.getUint32(SuperBlock.OFFSET_TOTAL_INODES)).toBe(totalInodes);
             expect(view.getUint32(SuperBlock.OFFSET_ROOT_DIRECTORY_ID)).toBe(rootDirectoryId);

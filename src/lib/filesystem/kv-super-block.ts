@@ -5,13 +5,13 @@ import { dataView, KvError_FS_FormatVersion } from '../utils';
 /**
  * Versioned on-disk superblock.
  *
- * Layout (uint32 fields, big-endian):
+ * Layout:
  * ```
- *   [ 0..4)   formatVersion   — bumped whenever the on-disk format changes
- *   [ 4..8)   capacityBytes
- *   [ 8..12)  blockSize
- *   [12..16)  totalInodes
- *   [16..20)  rootDirectoryId
+ *   [ 0.. 4)  formatVersion    (uint32)
+ *   [ 4..12)  capacityBytes    (uint64)
+ *   [12..16)  blockSize        (uint32)
+ *   [16..20)  totalInodes      (uint32)
+ *   [20..24)  rootDirectoryId  (uint32)
  * ```
  *
  * Bumping the version is mandatory whenever any layer below the superblock
@@ -25,14 +25,17 @@ export class SuperBlock {
      * Bump on every breaking on-disk layout change. Volumes from prior
      * versions can no longer be mounted by newer code (and vice versa)
      * until a migration is implemented.
+     *
+     * v1: initial versioned format.
+     * v2: 64-bit timestamps and file sizes; capacityBytes widened to uint64.
      */
-    public static readonly FORMAT_VERSION = 1;
+    public static readonly FORMAT_VERSION = 2;
 
     public static readonly OFFSET_FORMAT_VERSION = 0;
     public static readonly OFFSET_CAPACITY_BYTES = 4;
-    public static readonly OFFSET_BLOCK_SIZE = 8;
-    public static readonly OFFSET_TOTAL_INODES = 12;
-    public static readonly OFFSET_ROOT_DIRECTORY_ID = 16;
+    public static readonly OFFSET_BLOCK_SIZE = 12;
+    public static readonly OFFSET_TOTAL_INODES = 16;
+    public static readonly OFFSET_ROOT_DIRECTORY_ID = 20;
 
     private blockDevice: KvBlockDevice;
     private superBlockId: INodeId;
@@ -57,7 +60,7 @@ export class SuperBlock {
             throw new KvError_FS_FormatVersion(this.formatVersion, SuperBlock.FORMAT_VERSION);
         }
 
-        this.capacityBytes = view.getUint32(SuperBlock.OFFSET_CAPACITY_BYTES);
+        this.capacityBytes = Number(view.getBigUint64(SuperBlock.OFFSET_CAPACITY_BYTES));
         this.blockSize = view.getUint32(SuperBlock.OFFSET_BLOCK_SIZE);
         this.totalInodes = view.getUint32(SuperBlock.OFFSET_TOTAL_INODES);
         this.rootDirectoryId = view.getUint32(SuperBlock.OFFSET_ROOT_DIRECTORY_ID);
@@ -75,7 +78,7 @@ export class SuperBlock {
         view.setUint32(SuperBlock.OFFSET_FORMAT_VERSION, SuperBlock.FORMAT_VERSION);
         // capacityBytes comes straight off the device — the filesystem
         // doesn't get to override it.
-        view.setUint32(SuperBlock.OFFSET_CAPACITY_BYTES, blockDevice.getCapacityBytes());
+        view.setBigUint64(SuperBlock.OFFSET_CAPACITY_BYTES, BigInt(blockDevice.getCapacityBytes()));
         view.setUint32(SuperBlock.OFFSET_BLOCK_SIZE, blockDevice.getBlockSize());
         view.setUint32(SuperBlock.OFFSET_TOTAL_INODES, totalInodes);
         view.setUint32(SuperBlock.OFFSET_ROOT_DIRECTORY_ID, rootDirectory);

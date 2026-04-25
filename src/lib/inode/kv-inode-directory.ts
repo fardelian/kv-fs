@@ -9,10 +9,10 @@ type DirectoryEntriesList = Map<string, INodeId>;
  *
  * **First block (the inode block, ID = `this.id`):**
  * ```
- *   [0..4)                       creationTime  (uint32, ms)
- *   [4..8)                       modificationTime (uint32, ms)
- *   [8..12)                      numEntries (uint32, total across the chain)
- *   [12..blockSize - 8)          packed entries (variable length each)
+ *   [ 0.. 8)                     creationTime  (uint64, ms)
+ *   [ 8..16)                     modificationTime (uint64, ms)
+ *   [16..20)                     numEntries (uint32, total across the chain)
+ *   [20..blockSize - 8)          packed entries (variable length each)
  *   [blockSize - 8, blockSize - 4)
  *                                entriesInThisBlock (uint32)
  *   [blockSize - 4, blockSize)   nextBlockId (uint32, NO_NEXT_BLOCK if none)
@@ -41,8 +41,8 @@ type DirectoryEntriesList = Map<string, INodeId>;
 export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     /** Names are at most 16 bits' worth of UTF-8 bytes. Practical limit is also bounded by block size. */
     public static readonly MAX_NAME_LENGTH = 0xFFFF;
-    public static readonly OFFSET_NUM_ENTRIES = 8;
-    public static readonly OFFSET_FIRST_ENTRY = 12;
+    public static readonly OFFSET_NUM_ENTRIES = INode.HEADER_SIZE; // 16
+    public static readonly OFFSET_FIRST_ENTRY = INode.HEADER_SIZE + 4; // 20
     /** Per-entry overhead: 2 bytes for `uint16` name length + 4 bytes for `uint32` iNodeId. */
     public static readonly ENTRY_OVERHEAD_BYTES = 2 + 4;
     /** Last 8 bytes of every block: 4 bytes per-block entry count + 4 bytes next-block pointer. */
@@ -165,8 +165,8 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
 
             let offset: number;
             if (blockIdx === 0) {
-                view.setUint32(0, this.creationTime.getTime());
-                view.setUint32(4, this.modificationTime.getTime());
+                view.setBigUint64(INode.OFFSET_CREATION_TIME, BigInt(this.creationTime.getTime()));
+                view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, BigInt(this.modificationTime.getTime()));
                 view.setUint32(KvINodeDirectory.OFFSET_NUM_ENTRIES, this.entries.size);
                 offset = KvINodeDirectory.OFFSET_FIRST_ENTRY;
             } else {
@@ -227,8 +227,9 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     public static async createEmptyDirectory(blockDevice: KvBlockDevice, blockId: INodeId): Promise<KvINodeDirectory> {
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
-        view.setUint32(0, Date.now());
-        view.setUint32(4, Date.now());
+        const now = BigInt(Date.now());
+        view.setBigUint64(INode.OFFSET_CREATION_TIME, now);
+        view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, now);
         view.setUint32(KvINodeDirectory.OFFSET_NUM_ENTRIES, 0);
         view.setUint32(
             buffer.byteLength - KvINodeDirectory.FOOTER_OFFSET_BLOCK_ENTRY_COUNT_FROM_END,

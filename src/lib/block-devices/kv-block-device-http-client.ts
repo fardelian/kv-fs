@@ -27,7 +27,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         const res = await this.request(`${this.baseUrl}/blocks`);
         const body = await res.json() as { data: KvBlockDeviceMetadata };
         this.blockSize = body.data.blockSize;
-        this.capacityBlocks = body.data.capacityBlocks;
+        this.capacityBytes = body.data.capacityBytes;
     }
 
     protected getBlockUrl(blockId: INodeId): string {

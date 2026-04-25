@@ -30,27 +30,44 @@ describe('KvBlockDevice (base)', () => {
         });
     });
 
-    describe('getCapacityBlocks', () => {
-        it('returns the capacity passed to the constructor', () => {
-            const blocks = faker.number.int({ min: 1, max: 1000 });
-            const device = new MockBlockDevice(4096, blocks);
+    describe('getCapacityBytes', () => {
+        it('returns the capacityBytes passed to the constructor', () => {
+            const capacityBytes = faker.number.int({ min: 1, max: 1_000_000 });
+            const device = new MockBlockDevice(4096, capacityBytes);
 
-            expect(device.getCapacityBlocks()).toBe(blocks);
-        });
-
-        it('returns the same value across repeated calls', () => {
-            const blocks = faker.number.int({ min: 1, max: 1_000_000 });
-            const device = new MockBlockDevice(4096, blocks);
-
-            expect(device.getCapacityBlocks()).toBe(blocks);
+            expect(device.getCapacityBytes()).toBe(capacityBytes);
         });
 
         it('keeps each instance independent', () => {
-            const a = new MockBlockDevice(4096, 7);
-            const b = new MockBlockDevice(4096, 99);
+            const a = new MockBlockDevice(4096, 4096 * 7);
+            const b = new MockBlockDevice(4096, 4096 * 99);
 
-            expect(a.getCapacityBlocks()).toBe(7);
-            expect(b.getCapacityBlocks()).toBe(99);
+            expect(a.getCapacityBytes()).toBe(4096 * 7);
+            expect(b.getCapacityBytes()).toBe(4096 * 99);
+        });
+    });
+
+    describe('getCapacityBlocks', () => {
+        it('returns capacityBytes / blockSize when they divide evenly', () => {
+            const blockSize = 4096;
+            const blocks = faker.number.int({ min: 1, max: 1000 });
+            const device = new MockBlockDevice(blockSize, blockSize * blocks);
+
+            expect(device.getCapacityBlocks()).toBe(blocks);
+        });
+
+        it('floors when capacityBytes is not a multiple of blockSize', () => {
+            const blockSize = 4096;
+            const device = new MockBlockDevice(blockSize, blockSize * 3 + 1234);
+
+            expect(device.getCapacityBlocks()).toBe(3);
+        });
+
+        it('returns 0 when capacityBytes is smaller than blockSize', () => {
+            const blockSize = 4096;
+            const device = new MockBlockDevice(blockSize, blockSize - 1);
+
+            expect(device.getCapacityBlocks()).toBe(0);
         });
     });
 });

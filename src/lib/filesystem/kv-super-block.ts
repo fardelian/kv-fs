@@ -6,7 +6,7 @@ export class SuperBlock {
     private blockDevice: KvBlockDevice;
     private superBlockId: INodeId;
 
-    public totalBlocks = 0;
+    public capacityBytes = 0;
     public blockSize = 0;
     public totalInodes = 0;
     public rootDirectoryId: INodeId = 0;
@@ -20,10 +20,10 @@ export class SuperBlock {
         const buffer = await this.blockDevice.readBlock(this.superBlockId);
         const view = dataView(buffer);
 
-        this.totalBlocks = view.getInt32(0, false);
-        this.blockSize = view.getInt32(4, false);
-        this.totalInodes = view.getInt32(8, false);
-        this.rootDirectoryId = view.getInt32(12, false);
+        this.capacityBytes = view.getInt32(0);
+        this.blockSize = view.getInt32(4);
+        this.totalInodes = view.getInt32(8);
+        this.rootDirectoryId = view.getInt32(12);
     }
 
     public static async createSuperBlock(
@@ -35,12 +35,12 @@ export class SuperBlock {
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
 
-        // The block count comes straight off the device — the
-        // filesystem doesn't get to override it.
-        view.setInt32(0, blockDevice.getCapacityBlocks(), false);
-        view.setInt32(4, blockDevice.getBlockSize(), false);
-        view.setInt32(8, totalInodes, false);
-        view.setInt32(12, rootDirectory, false);
+        // capacityBytes comes straight off the device — the filesystem
+        // doesn't get to override it.
+        view.setInt32(0, blockDevice.getCapacityBytes());
+        view.setInt32(4, blockDevice.getBlockSize());
+        view.setInt32(8, totalInodes);
+        view.setInt32(12, rootDirectory);
 
         await blockDevice.writeBlock(id, buffer);
 

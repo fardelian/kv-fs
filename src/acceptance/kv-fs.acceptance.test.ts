@@ -10,14 +10,14 @@ const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 async function makeFs(): Promise<KvFilesystemEasy> {
-    const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, TOTAL_BLOCKS);
+    const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     await KvFilesystem.format(blockDevice, TOTAL_INODES);
     const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
     return new KvFilesystemEasy(filesystem, '/');
 }
 
 async function makeRot13Fs(): Promise<{ fs: KvFilesystemEasy; underlying: KvBlockDeviceMemory }> {
-    const underlying = new KvBlockDeviceMemory(BLOCK_SIZE, TOTAL_BLOCKS);
+    const underlying = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     const encrypted = new KvEncryptedBlockDevice(underlying, new KvEncryptionRot13());
     await KvFilesystem.format(encrypted, TOTAL_INODES);
     const filesystem = new KvFilesystem(encrypted, SUPER_BLOCK_ID);
@@ -108,7 +108,7 @@ describe('kv-fs (acceptance)', () => {
     });
 
     it('reports highestBlockId climbing as the filesystem allocates blocks', async () => {
-        const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, TOTAL_BLOCKS);
+        const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
 
         // Fresh device: nothing allocated yet.
         expect(await blockDevice.getHighestBlockId()).toBe(-1);

@@ -22,7 +22,7 @@ async function run() {
 
     const fsBlockDevice = new KvBlockDeviceFs(
         BLOCK_SIZE,
-        TOTAL_BLOCKS,
+        BLOCK_SIZE * TOTAL_BLOCKS,
         LOCAL_FS_PATH,
     );
 

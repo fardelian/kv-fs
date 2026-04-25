@@ -12,7 +12,7 @@ const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 async function run() {
-    // Pure transport — fetches blockSize/capacityBlocks from the server.
+    // Pure transport — fetches blockSize/capacityBytes from the server.
     const httpClient = new KvBlockDeviceHttpClient(`http://localhost:${PORT}`);
 
     // Peek at what the server advertises before init() does the same fetch.

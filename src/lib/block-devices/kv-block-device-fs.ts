@@ -10,10 +10,10 @@ export class KvBlockDeviceFs extends KvBlockDevice {
 
     constructor(
         blockSize: number,
-        capacityBlocks: number,
+        capacityBytes: number,
         localFsBasePath: string,
     ) {
-        super(blockSize, capacityBlocks);
+        super(blockSize, capacityBytes);
         this.localFsBasePath = localFsBasePath;
     }
 

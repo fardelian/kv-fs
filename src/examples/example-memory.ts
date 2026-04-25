@@ -13,7 +13,7 @@ async function run() {
 
     // Create memory block device
 
-    const memoryBlockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, TOTAL_BLOCKS);
+    const memoryBlockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
 
     // Create file system and wrap it with KvFilesystemEasy to simplify access
 

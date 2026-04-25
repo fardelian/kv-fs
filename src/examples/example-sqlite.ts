@@ -25,7 +25,7 @@ async function run() {
 
     const sqliteBlockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
-        TOTAL_BLOCKS,
+        BLOCK_SIZE * TOTAL_BLOCKS,
         database,
         'blocks',
     );

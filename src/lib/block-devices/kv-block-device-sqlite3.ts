@@ -9,11 +9,11 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
 
     constructor(
         blockSize: number,
-        capacityBlocks: number,
+        capacityBytes: number,
         database: AsyncDatabase,
         tableName: string,
     ) {
-        super(blockSize, capacityBlocks);
+        super(blockSize, capacityBytes);
         this.database = database;
         this.tableName = tableName;
     }

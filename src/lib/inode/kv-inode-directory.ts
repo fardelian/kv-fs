@@ -6,8 +6,8 @@ type DirectoryEntriesList = Map<string, INodeId>;
 
 export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     public static readonly MAX_NAME_LENGTH = 255;
-    public static readonly OFFSET_NUM_ENTRIES = 16;
-    public static readonly OFFSET_ENTRIES_PREFIX = 20;
+    public static readonly OFFSET_NUM_ENTRIES = 12;
+    public static readonly OFFSET_ENTRIES_PREFIX = 16;
 
     private entries: DirectoryEntriesList = new Map();
 
@@ -16,14 +16,14 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
 
         const buffer = await this.blockDevice.readBlock(this.id);
         const view = dataView(buffer);
-        const numEntries = view.getInt32(KvINodeDirectory.OFFSET_NUM_ENTRIES, false);
+        const numEntries = view.getInt32(KvINodeDirectory.OFFSET_NUM_ENTRIES);
 
         for (let i = 0; i < numEntries; i++) {
             const nameOffset = KvINodeDirectory.OFFSET_ENTRIES_PREFIX + i * 268 + 1;
             const nameLength = view.getInt8(KvINodeDirectory.OFFSET_ENTRIES_PREFIX + i * 268);
 
             const name = utf8Decode(buffer, nameOffset, nameOffset + nameLength);
-            const iNodeId = view.getInt32(nameOffset + KvINodeDirectory.MAX_NAME_LENGTH, false);
+            const iNodeId = view.getInt32(nameOffset + KvINodeDirectory.MAX_NAME_LENGTH);
 
             this.entries.set(name, iNodeId);
         }
@@ -41,9 +41,9 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
 
         const buffer = new Uint8Array(this.blockDevice.getBlockSize());
         const view = dataView(buffer);
-        view.setBigUint64(0, BigInt(this.creationTime.getTime()), false);
-        view.setBigUint64(8, BigInt(this.modificationTime.getTime()), false);
-        view.setInt32(16, this.entries.size, false);
+        view.setInt32(0, this.creationTime.getTime());
+        view.setInt32(4, this.modificationTime.getTime());
+        view.setInt32(12, this.entries.size);
 
         let i = 0;
         for (const [name, iNodeId] of this.entries) {
@@ -51,9 +51,9 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
             if (nameBytes.length > KvINodeDirectory.MAX_NAME_LENGTH) {
                 throw new KvError_INode_NameOverflow(`INode name "${name}" length "${name.length}" exceeds maximum length "${KvINodeDirectory.MAX_NAME_LENGTH}".`);
             }
-            view.setInt8(20 + i * 268, nameBytes.length);
-            buffer.set(nameBytes, 20 + i * 268 + 1);
-            view.setInt32(20 + i * 268 + 256, iNodeId, false);
+            view.setInt8(16 + i * 268, nameBytes.length);
+            buffer.set(nameBytes, 16 + i * 268 + 1);
+            view.setInt32(16 + i * 268 + 256, iNodeId);
             i++;
         }
 
@@ -89,9 +89,9 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     public static async createEmptyDirectory(blockDevice: KvBlockDevice, blockId: INodeId): Promise<KvINodeDirectory> {
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
-        view.setBigUint64(0, BigInt(Date.now()), false);
-        view.setBigUint64(8, BigInt(Date.now()), false);
-        view.setInt32(16, 0, false);
+        view.setInt32(0, Date.now());
+        view.setInt32(4, Date.now());
+        view.setInt32(12, 0);
 
         await blockDevice.writeBlock(blockId, buffer);
 

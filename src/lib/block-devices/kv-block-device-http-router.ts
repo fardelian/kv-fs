@@ -35,7 +35,7 @@ export class KvBlockDeviceHttpRouter {
             .get('/blocks', async (_req, res) => {
                 const meta: KvBlockDeviceMetadata = {
                     blockSize: this.blockDevice.getBlockSize(),
-                    capacityBlocks: this.blockDevice.getCapacityBlocks(),
+                    capacityBytes: this.blockDevice.getCapacityBytes(),
                     highestBlockId: await this.blockDevice.getHighestBlockId(),
                 };
                 res.send({ data: meta });

@@ -12,7 +12,7 @@ export class MockBlockDevice extends KvBlockDevice {
     public getHighestBlockId = jest.fn<() => Promise<INodeId>>();
     public format = jest.fn<() => Promise<void>>();
 
-    constructor(blockSize = 4096, capacityBlocks = 1024) {
-        super(blockSize, capacityBlocks);
+    constructor(blockSize = 4096, capacityBytes: number = blockSize * 1024) {
+        super(blockSize, capacityBytes);
     }
 }

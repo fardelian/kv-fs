@@ -19,11 +19,11 @@ export abstract class INode<DataType> {
         const buffer = await this.blockDevice.readBlock(this.id);
         const view = dataView(buffer);
 
-        const creationTimeMs = view.getBigUint64(0, false);
-        const modificationTimeMs = view.getBigUint64(8, false);
+        const creationTimeMs = view.getInt32(0);
+        const modificationTimeMs = view.getInt32(4);
 
-        this.creationTime = new Date(Number(creationTimeMs));
-        this.modificationTime = new Date(Number(modificationTimeMs));
+        this.creationTime = new Date(creationTimeMs);
+        this.modificationTime = new Date(modificationTimeMs);
     }
 
     protected abstract read(): Promise<DataType>;

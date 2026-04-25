@@ -14,14 +14,14 @@ export class KvINodeFile extends INode<Uint8Array> {
         const buffer = await this.blockDevice.readBlock(this.id);
         const view = dataView(buffer);
 
-        this.size = view.getInt32(16, false);
+        this.size = view.getInt32(12);
 
         this.dataBlockIds = [];
 
         let sizeFromBlocks = 0;
         let i = 0;
         while (sizeFromBlocks < this.size) {
-            this.dataBlockIds.push(view.getInt32(20 + i * 4, false));
+            this.dataBlockIds.push(view.getInt32(16 + i * 4));
             sizeFromBlocks += this.blockDevice.getBlockSize();
             i++;
         }
@@ -226,12 +226,12 @@ export class KvINodeFile extends INode<Uint8Array> {
     private async writeMetadata(): Promise<void> {
         const buffer = new Uint8Array(this.blockDevice.getBlockSize());
         const view = dataView(buffer);
-        view.setBigUint64(0, BigInt(this.creationTime.getTime()), false);
-        view.setBigUint64(8, BigInt(this.modificationTime.getTime()), false);
-        view.setInt32(16, this.size, false);
+        view.setInt32(0, this.creationTime.getTime());
+        view.setInt32(4, this.modificationTime.getTime());
+        view.setInt32(12, this.size);
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
-            view.setInt32(20 + i * 4, this.dataBlockIds[i], false);
+            view.setInt32(16 + i * 4, this.dataBlockIds[i]);
         }
 
         await this.blockDevice.writeBlock(this.id, buffer);
@@ -244,12 +244,12 @@ export class KvINodeFile extends INode<Uint8Array> {
 
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
-        view.setBigUint64(0, BigInt(creationTime.getTime()), false);
-        view.setBigUint64(8, BigInt(modificationTime.getTime()), false);
-        view.setInt32(16, 0, false);
+        view.setInt32(0, creationTime.getTime());
+        view.setInt32(4, modificationTime.getTime());
+        view.setInt32(12, 0);
 
-        for (let i = 0; i < (blockDevice.getBlockSize() - 20) / 4; i++) {
-            view.setInt32(20 + i * 4, 0, false);
+        for (let i = 0; i < (blockDevice.getBlockSize() - 16) / 4; i++) {
+            view.setInt32(16 + i * 4, 0);
         }
 
         await blockDevice.writeBlock(id, buffer);

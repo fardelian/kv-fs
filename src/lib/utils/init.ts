@@ -4,11 +4,11 @@ interface HasInit {
     init(): Promise<void>;
 }
 
-const inflight = new WeakMap<HasInit, Promise<unknown>>();
+const inflight = new WeakMap<object, Promise<unknown>>();
 
-const ready = new WeakSet<HasInit>();
+const ready = new WeakSet<object>();
 
-export function Init<This extends HasInit, Args extends any[], Return>(
+export function Init<This extends object, Args extends any[], Return>(
     target: (this: This, ...args: Args) => Promise<Return>,
     ctx: ClassMethodDecoratorContext<This, (this: This, ...args: Args) => Promise<Return>>,
 ) {
@@ -21,7 +21,7 @@ export function Init<This extends HasInit, Args extends any[], Return>(
             let pending = inflight.get(this);
 
             if (!pending) {
-                pending = this.init()
+                pending = ((this as HasInit).init?.() ?? Promise.resolve())
                     .then(() => ready.add(this))
                     .finally(() => inflight.delete(this));
                 inflight.set(this, pending);

@@ -1,5 +1,5 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
-import { KvBlockDeviceHttpClient } from '../lib/block-devices';
+import { KvBlockDeviceHttpClient, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvEncryptionPassword } from '../lib/encryption';
 
 const PORT = 3000;
@@ -8,26 +8,22 @@ const ENC_PASSWORD = 'the_user_password';
 const ENC_SALT = 'some_static_secret';
 const ENC_ITERATIONS = 10;
 
-const BLOCK_SIZE = 4096;
-const TOTAL_BLOCKS = 1000;
-const TOTAL_NODES = 100;
+const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 async function run() {
-    // Create encrypted client
+    // Pure transport — fetches blockSize/maxBlockId from the server.
+    const httpClient = new KvBlockDeviceHttpClient(`http://localhost:${PORT}`);
+    await httpClient.init();
 
+    // Wrap with encryption. The exposed block size shrinks by the cipher's
+    // overhead; the wire still carries blocks of the server's size.
     const clientEncryption = new KvEncryptionPassword(ENC_PASSWORD, ENC_SALT, ENC_ITERATIONS);
+    const clientBlockDevice = new KvEncryptedBlockDevice(httpClient, clientEncryption);
 
-    const clientBlockDevice = new KvBlockDeviceHttpClient(
-        BLOCK_SIZE,
-        BLOCK_SIZE * TOTAL_BLOCKS,
-        `http://localhost:${PORT}`,
-        clientEncryption,
-    );
-
-    // Create file system
-
-    await KvFilesystem.format(clientBlockDevice, TOTAL_BLOCKS, TOTAL_NODES);
+    // Format and mount.
+    const totalBlocks = clientBlockDevice.getMaxBlockId();
+    await KvFilesystem.format(clientBlockDevice, totalBlocks, TOTAL_INODES);
 
     const fileSystem = new KvFilesystem(clientBlockDevice, SUPER_BLOCK_ID);
     const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');

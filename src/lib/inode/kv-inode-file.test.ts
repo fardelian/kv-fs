@@ -3,8 +3,8 @@ import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvINodeFile } from './kv-inode-file';
 
-// 1 KiB blocks leave 1008 bytes for data-block-id pointers in the inode
-// (block size minus the 16-byte header), with plenty of room left if we want
+// 1 KiB blocks leave 1012 bytes for data-block-id pointers in the inode
+// (block size minus the 12-byte header), with plenty of room left if we want
 // to add more metadata fields later.
 const BLOCK_SIZE = 1024;
 const CAPACITY_BYTES = BLOCK_SIZE * 64;

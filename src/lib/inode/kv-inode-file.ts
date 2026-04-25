@@ -14,14 +14,14 @@ export class KvINodeFile extends INode<Uint8Array> {
         const buffer = await this.blockDevice.readBlock(this.id);
         const view = dataView(buffer);
 
-        this.size = view.getInt32(12);
+        this.size = view.getInt32(8);
 
         this.dataBlockIds = [];
 
         let sizeFromBlocks = 0;
         let i = 0;
         while (sizeFromBlocks < this.size) {
-            this.dataBlockIds.push(view.getInt32(16 + i * 4));
+            this.dataBlockIds.push(view.getInt32(12 + i * 4));
             sizeFromBlocks += this.blockDevice.getBlockSize();
             i++;
         }
@@ -228,10 +228,10 @@ export class KvINodeFile extends INode<Uint8Array> {
         const view = dataView(buffer);
         view.setInt32(0, this.creationTime.getTime());
         view.setInt32(4, this.modificationTime.getTime());
-        view.setInt32(12, this.size);
+        view.setInt32(8, this.size);
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
-            view.setInt32(16 + i * 4, this.dataBlockIds[i]);
+            view.setInt32(12 + i * 4, this.dataBlockIds[i]);
         }
 
         await this.blockDevice.writeBlock(this.id, buffer);
@@ -246,10 +246,10 @@ export class KvINodeFile extends INode<Uint8Array> {
         const view = dataView(buffer);
         view.setInt32(0, creationTime.getTime());
         view.setInt32(4, modificationTime.getTime());
-        view.setInt32(12, 0);
+        view.setInt32(8, 0);
 
-        for (let i = 0; i < (blockDevice.getBlockSize() - 16) / 4; i++) {
-            view.setInt32(16 + i * 4, 0);
+        for (let i = 0; i < (blockDevice.getBlockSize() - 12) / 4; i++) {
+            view.setInt32(12 + i * 4, 0);
         }
 
         await blockDevice.writeBlock(id, buffer);

@@ -6,8 +6,8 @@ type DirectoryEntriesList = Map<string, INodeId>;
 
 export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     public static readonly MAX_NAME_LENGTH = 255;
-    public static readonly OFFSET_NUM_ENTRIES = 12;
-    public static readonly OFFSET_ENTRIES_PREFIX = 16;
+    public static readonly OFFSET_NUM_ENTRIES = 8;
+    public static readonly OFFSET_ENTRIES_PREFIX = 12;
 
     private entries: DirectoryEntriesList = new Map();
 
@@ -43,7 +43,7 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         const view = dataView(buffer);
         view.setInt32(0, this.creationTime.getTime());
         view.setInt32(4, this.modificationTime.getTime());
-        view.setInt32(12, this.entries.size);
+        view.setInt32(8, this.entries.size);
 
         let i = 0;
         for (const [name, iNodeId] of this.entries) {
@@ -51,9 +51,9 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
             if (nameBytes.length > KvINodeDirectory.MAX_NAME_LENGTH) {
                 throw new KvError_INode_NameOverflow(`INode name "${name}" length "${name.length}" exceeds maximum length "${KvINodeDirectory.MAX_NAME_LENGTH}".`);
             }
-            view.setInt8(16 + i * 268, nameBytes.length);
-            buffer.set(nameBytes, 16 + i * 268 + 1);
-            view.setInt32(16 + i * 268 + 256, iNodeId);
+            view.setInt8(12 + i * 268, nameBytes.length);
+            buffer.set(nameBytes, 12 + i * 268 + 1);
+            view.setInt32(12 + i * 268 + 256, iNodeId);
             i++;
         }
 
@@ -91,7 +91,7 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         const view = dataView(buffer);
         view.setInt32(0, Date.now());
         view.setInt32(4, Date.now());
-        view.setInt32(12, 0);
+        view.setInt32(8, 0);
 
         await blockDevice.writeBlock(blockId, buffer);
 

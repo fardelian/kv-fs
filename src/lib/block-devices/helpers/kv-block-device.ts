@@ -184,6 +184,54 @@ export abstract class KvBlockDevice {
     }
 
     /**
+     * Read a sub-range `[start, end)` of the block at `blockId`.
+     * Both offsets are block-relative, in bytes.
+     *
+     * The default implementation reads the whole block via
+     * {@link readBlock} and slices out the requested range — i.e. it
+     * always pays for a full-block read even if the caller only wants
+     * a few bytes. Backends with native partial-read support should
+     * override this.
+     *
+     * @param blockId  ID of the block to read from.
+     * @param start    Inclusive start offset (block-relative bytes).
+     * @param end      Exclusive end offset (block-relative bytes).
+     * @returns        A copy of bytes `[start, end)` from the block;
+     *                 empty array when `end <= start`.
+     */
+    public async readBlockPartial(blockId: INodeId, start: number, end: number): Promise<Uint8Array> {
+        if (end <= start) {
+            return new Uint8Array(0);
+        }
+        const block = await this.readBlock(blockId);
+        return block.slice(start, end);
+    }
+
+    /**
+     * Overwrite a portion of the block at `blockId` with `data`,
+     * starting at block-relative `offset`. Bytes outside
+     * `[offset, offset + data.length)` are preserved.
+     *
+     * The default implementation reads the existing block, splices
+     * `data` in at `offset`, and writes the full block back — a full
+     * read+write per call, even when only a few bytes change. Backends
+     * with native partial-write support should override this.
+     *
+     * @param blockId  ID of the block to update.
+     * @param offset   Block-relative offset at which to start writing.
+     * @param data     Bytes to write. Throws if
+     *                 `offset + data.length > getBlockSize()`.
+     */
+    public async writeBlockPartial(blockId: INodeId, offset: number, data: Uint8Array): Promise<void> {
+        if (data.length === 0) {
+            return;
+        }
+        const block = await this.readBlock(blockId);
+        block.set(data, offset);
+        await this.writeBlock(blockId, block);
+    }
+
+    /**
      * Return the largest block ID currently allocated on the device,
      * or `-1` when the device has no blocks. Dynamic — must be
      * recomputed each call; never cache the result.

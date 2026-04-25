@@ -1,12 +1,13 @@
-import { INodeId } from '../inode/kv-inode';
-import { Init } from '../types';
+import { INodeId } from '../inode';
 
-export abstract class KvBlockDevice extends Init {
+export abstract class KvBlockDevice {
     protected blockSize: number;
 
     protected constructor(blockSize: number) {
-        super();
         this.blockSize = blockSize;
+    }
+
+    public async init(): Promise<void> {
     }
 
     public getBlockSize(): number {

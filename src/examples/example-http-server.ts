@@ -28,10 +28,8 @@ async function run() {
         BLOCK_SIZE,
         database,
     );
-    await sqliteBlockDevice.init();
 
     const encryptedServerBlockDevice = new KvEncryptedBlockDevice(sqliteBlockDevice, encryption);
-    await encryptedServerBlockDevice.init();
 
     const server = express();
     const router = express.Router();

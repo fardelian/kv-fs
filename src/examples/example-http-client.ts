@@ -26,9 +26,7 @@ async function run() {
     await KvFilesystem.format(clientBlockDevice, TOTAL_BLOCKS, TOTAL_NODES);
 
     const fileSystem = new KvFilesystem(clientBlockDevice, SUPER_BLOCK_ID);
-    await fileSystem.init();
     const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
-    await easyFileSystem.init();
 
     // Create test files
 

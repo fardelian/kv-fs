@@ -1,7 +1,8 @@
-import { KvBlockDevice } from './types';
+import { KvBlockDevice } from './kv-block-device.base';
 import { INodeId } from '../inode/kv-inode';
 import { Database } from 'sqlite3';
-import { KvError_BD_NotFound } from '../types';
+import { Init } from '../utils/init';
+import { KvError_BD_NotFound } from '../utils/errors';
 
 export class KvBlockDeviceSqlite3 extends KvBlockDevice {
     private readonly database: Database;
@@ -14,21 +15,16 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         this.database = dataBasePath;
     }
 
-    public async init(): Promise<this> {
-        await super.init();
-
+    public async init(): Promise<void> {
         await new Promise<void>((resolve, reject) => {
             this.database.run(
                 'CREATE TABLE IF NOT EXISTS blocks (id INTEGER PRIMARY KEY, data BLOB)',
                 (err) => err ? reject(err) : resolve());
         });
-
-        return this;
     }
 
+    @Init
     public async readBlock(blockId: INodeId): Promise<Buffer> {
-        this.ensureInit();
-
         return new Promise((resolve, reject) => {
             this.database.get(
                 'SELECT data FROM blocks WHERE id = ?', [blockId],
@@ -44,9 +40,8 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         });
     }
 
+    @Init
     public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
-        this.ensureInit();
-
         return new Promise<void>((resolve, reject) => {
             this.database.run(
                 `INSERT OR REPLACE INTO blocks (id, data) VALUES (?, ?)`, [blockId, data],
@@ -54,9 +49,8 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         });
     }
 
+    @Init
     public async freeBlock(blockId: INodeId): Promise<void> {
-        this.ensureInit();
-
         return new Promise<void>((resolve, reject) => {
             this.database.run(
                 'DELETE FROM blocks WHERE id = ?', [blockId],
@@ -64,9 +58,8 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         });
     }
 
+    @Init
     public async existsBlock(blockId: INodeId): Promise<boolean> {
-        this.ensureInit();
-
         return new Promise<boolean>((resolve, reject) => {
             this.database.get(
                 'SELECT EXISTS(SELECT 1 FROM blocks WHERE id = ? LIMIT 1) AS E', [blockId],
@@ -74,9 +67,8 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         });
     }
 
+    @Init
     public async getNextINodeId(): Promise<INodeId> {
-        this.ensureInit();
-
         return new Promise<INodeId>((resolve, reject) => {
             this.database.get(
                 'SELECT MAX(id) AS maxId FROM blocks',

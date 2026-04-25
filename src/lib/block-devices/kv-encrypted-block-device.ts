@@ -1,6 +1,7 @@
-import { KvBlockDevice } from './types';
+import { KvBlockDevice } from './kv-block-device.base';
 import { INodeId } from '../inode/kv-inode';
-import { KvError_BD_Overflow } from '../types';
+import { Init } from '../utils/init';
+import { KvError_BD_Overflow } from '../utils/errors';
 import { KvEncryption } from '../encryption/types';
 
 /** Wrap a KvBlockDevice with encryption. Also validates and ensures block size.*/
@@ -22,17 +23,15 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
         return this.blockDevice.getBlockSize();
     }
 
+    @Init
     public async readBlock(blockId: INodeId): Promise<Buffer> {
-        this.ensureInit();
-
         const encryptedData = await this.blockDevice.readBlock(blockId);
 
         return this.encryption.decrypt(encryptedData);
     }
 
+    @Init
     public async writeBlock(blockId: INodeId, data: Buffer): Promise<void> {
-        this.ensureInit();
-
         if (data.length > this.getBlockSize()) {
             throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.getBlockSize()}" bytes.`);
         }
@@ -44,21 +43,18 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
         return this.blockDevice.writeBlock(blockId, encryptedData);
     }
 
+    @Init
     public async freeBlock(blockId: INodeId): Promise<void> {
-        this.ensureInit();
-
         return this.blockDevice.freeBlock(blockId);
     }
 
+    @Init
     public async existsBlock(blockId: INodeId): Promise<boolean> {
-        this.ensureInit();
-
         return this.blockDevice.existsBlock(blockId);
     }
 
+    @Init
     public async getNextINodeId(): Promise<INodeId> {
-        this.ensureInit();
-
         return this.blockDevice.getNextINodeId();
     }
 }

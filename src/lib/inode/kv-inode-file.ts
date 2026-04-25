@@ -1,5 +1,6 @@
 import { INode, INodeId } from './kv-inode';
 import { KvBlockDevice } from '../block-devices';
+import { Init } from '../utils/init';
 
 export class KvINodeFile extends INode<Buffer> {
     public size: number = 0;
@@ -10,7 +11,7 @@ export class KvINodeFile extends INode<Buffer> {
         super(blockDevice, id);
     }
 
-    public async init(): Promise<this> {
+    public async init(): Promise<void> {
         await super.init();
 
         const buffer = await this.blockDevice.readBlock(this.id);
@@ -26,16 +27,10 @@ export class KvINodeFile extends INode<Buffer> {
             sizeFromBlocks += this.blockDevice.getBlockSize();
             i++;
         }
-        // for (let i = 0; i < (this.blockDevice.getBlockSize() - 20) / 4; i++) {
-        //     this.dataBlockIds.push(buffer.readInt32BE(20 + i * 4));
-        // }
-
-        return this;
     }
 
+    @Init
     public async read(): Promise<Buffer> {
-        this.ensureInit();
-
         let data = Buffer.alloc(this.size);
 
         for (let i = 0; i < this.dataBlockIds.length; i++) {
@@ -46,9 +41,8 @@ export class KvINodeFile extends INode<Buffer> {
         return data;
     }
 
+    @Init
     public async write(data: Buffer): Promise<void> {
-        this.ensureInit();
-
         const requiredBlocks = Math.ceil(data.length / this.blockDevice.getBlockSize());
 
         // If more blocks are required, allocate them
@@ -88,9 +82,8 @@ export class KvINodeFile extends INode<Buffer> {
         await this.blockDevice.writeBlock(this.id, buffer);
     }
 
+    @Init
     public async unlink(): Promise<void> {
-        this.ensureInit();
-
         for (let i = 0; i < this.dataBlockIds.length; i++) {
             await this.blockDevice.freeBlock(this.dataBlockIds[i]);
         }
@@ -117,7 +110,6 @@ export class KvINodeFile extends INode<Buffer> {
 
         await blockDevice.writeBlock(id, buffer);
 
-        const fileINode = new KvINodeFile(blockDevice, id);
-        return await fileINode.init();
+        return new KvINodeFile(blockDevice, id);
     }
 }

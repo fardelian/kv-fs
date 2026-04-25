@@ -1,8 +1,9 @@
 import { KvINodeFile, KvINodeDirectory } from '../inode';
 import { KvFilesystem } from './kv-filesystem';
-import { Init, KvError_FS_Exists } from '../types';
+import { Init } from '../utils/init';
+import { KvError_FS_Exists } from '../utils/errors';
 
-export class KvFilesystemEasy extends Init {
+export class KvFilesystemEasy {
     private readonly filesystem: KvFilesystem;
     private readonly separator;
 
@@ -10,22 +11,17 @@ export class KvFilesystemEasy extends Init {
         filesystem: KvFilesystem,
         separator: string = '/',
     ) {
-        super();
         this.filesystem = filesystem;
         this.separator = separator;
     }
 
-    public async init(): Promise<this> {
-        await super.init();
-
-        return this;
+    public async init(): Promise<void> {
     }
 
     // File operations
 
+    @Init
     public async createFile(pathName: string): Promise<KvINodeFile> {
-        this.ensureInit();
-
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 
@@ -38,9 +34,8 @@ export class KvFilesystemEasy extends Init {
         return await this.filesystem.createFile(fileName, directory);
     }
 
+    @Init
     public async getFile(pathName: string): Promise<KvINodeFile> {
-        this.ensureInit();
-
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 
@@ -48,25 +43,22 @@ export class KvFilesystemEasy extends Init {
         return await this.filesystem.getFile(fileName, directory);
     }
 
+    @Init
     public async readFile(pathName: string): Promise<Buffer> {
-        this.ensureInit();
-
         const file = await this.getFile(pathName);
         return await file.read();
     }
 
+    @Init
     public async writeFile(pathName: string, data: Buffer): Promise<void> {
-        this.ensureInit();
-
         const file = await this.getFile(pathName);
         await file.write(data);
     }
 
     // Directory operations
 
+    @Init
     public async createDirectory(pathName: string, createPath: boolean = false): Promise<KvINodeDirectory> {
-        this.ensureInit();
-
         const path = pathName.split(this.separator).slice(1);
         const directoryName = path.pop()!;
 
@@ -83,9 +75,8 @@ export class KvFilesystemEasy extends Init {
         return await this.filesystem.createDirectory(directoryName, directory);
     }
 
+    @Init
     public async getDirectory(pathName: string): Promise<KvINodeDirectory> {
-        this.ensureInit();
-
         const path = pathName.split(this.separator).slice(1);
         const directoryName = path.pop()!;
 
@@ -101,9 +92,8 @@ export class KvFilesystemEasy extends Init {
         return await this.filesystem.getDirectory(directoryName, directory);
     }
 
+    @Init
     public async readDirectory(pathName: string): Promise<string[]> {
-        this.ensureInit();
-
         const directory = await this.getDirectory(pathName);
         const directoryEntries = await directory.read();
 
@@ -112,9 +102,8 @@ export class KvFilesystemEasy extends Init {
 
     // Common operations
 
+    @Init
     public async unlink(pathName: string): Promise<void> {
-        this.ensureInit();
-
         const path = pathName.split(this.separator);
         const fileName = path.pop()!;
 

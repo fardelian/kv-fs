@@ -24,19 +24,15 @@ async function run() {
         BLOCK_SIZE,
         LOCAL_FS_PATH,
     );
-    await fsBlockDevice.init();
 
     const encryptedFsBlockDevice = new KvEncryptedBlockDevice(fsBlockDevice, encryption);
-    await encryptedFsBlockDevice.init();
 
     // Create file system
 
     await KvFilesystem.format(encryptedFsBlockDevice, TOTAL_BLOCKS, TOTAL_NODES);
 
     const fileSystem = new KvFilesystem(encryptedFsBlockDevice, SUPER_BLOCK_ID);
-    await fileSystem.init();
     const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
-    await easyFileSystem.init();
 
     // Create test files
 

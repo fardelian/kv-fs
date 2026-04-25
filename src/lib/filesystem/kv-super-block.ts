@@ -1,8 +1,7 @@
 import { KvBlockDevice } from '../block-devices';
 import { INodeId } from '../inode';
-import { Init } from '../types';
 
-export class SuperBlock extends Init {
+export class SuperBlock {
     private blockDevice: KvBlockDevice;
     private superBlockId: INodeId;
 
@@ -12,22 +11,17 @@ export class SuperBlock extends Init {
     public rootDirectoryId: INodeId = 0;
 
     constructor(blockDevice: KvBlockDevice, superBlockId: INodeId) {
-        super();
         this.blockDevice = blockDevice;
         this.superBlockId = superBlockId;
     }
 
-    public async init(): Promise<this> {
-        await super.init();
-
+    public async init(): Promise<void> {
         const buffer = await this.blockDevice.readBlock(this.superBlockId);
 
         this.totalBlocks = buffer.readInt32BE(0);
         this.blockSize = buffer.readInt32BE(4);
         this.totalInodes = buffer.readInt32BE(8);
         this.rootDirectoryId = buffer.readInt32BE(12);
-
-        return this;
     }
 
     public static async createSuperBlock(
@@ -46,7 +40,6 @@ export class SuperBlock extends Init {
 
         await blockDevice.writeBlock(id, buffer);
 
-        const superBlock = new SuperBlock(blockDevice, id);
-        return await superBlock.init();
+        return new SuperBlock(blockDevice, id);
     }
 }

@@ -1,6 +1,7 @@
 import { INode, INodeId } from './kv-inode';
 import { KvBlockDevice } from '../block-devices';
-import { KvError_INode_NameOverflow } from '../types';
+import { Init } from '../utils/init';
+import { KvError_INode_NameOverflow } from '../utils/errors';
 
 type DirectoryEntriesList = Map<string, INodeId>;
 
@@ -15,7 +16,7 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         super(blockDevice, id);
     }
 
-    public async init(): Promise<this> {
+    public async init(): Promise<void> {
         await super.init();
 
         const buffer = await this.blockDevice.readBlock(this.id);
@@ -30,19 +31,15 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
 
             this.entries.set(name, iNodeId);
         }
-
-        return this;
     }
 
+    @Init
     public async read(): Promise<DirectoryEntriesList> {
-        this.ensureInit();
-
         return new Map(this.entries);
     }
 
+    @Init
     public async write(newEntries: DirectoryEntriesList): Promise<void> {
-        this.ensureInit();
-
         this.entries = newEntries;
         this.modificationTime = new Date();
 
@@ -66,23 +63,20 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         await this.blockDevice.writeBlock(this.id, buffer);
     }
 
+    @Init
     public async addEntry(name: string, iNodeId: INodeId): Promise<void> {
-        this.ensureInit();
-
         this.entries.set(name, iNodeId);
         await this.write(this.entries);
     }
 
+    @Init
     public async removeEntry(name: string): Promise<void> {
-        this.ensureInit();
-
         this.entries.delete(name);
         await this.write(this.entries);
     }
 
+    @Init
     public async getEntry(name: string): Promise<INodeId | undefined> {
-        this.ensureInit();
-
         return this.entries.get(name);
     }
 
@@ -95,7 +89,6 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         await blockDevice.writeBlock(blockId, buffer);
 
         const directory = new KvINodeDirectory(blockDevice, blockId);
-        await directory.init();
         await directory.write(new Map());
 
         return directory;

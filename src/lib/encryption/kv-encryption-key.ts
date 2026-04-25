@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'crypto';
-import { KvError_Enc_Key } from '../types';
+import { KvError_Enc_Key } from '../utils/errors';
 import { KvEncryption } from './types';
 
 export class KvEncryptionKey implements KvEncryption {

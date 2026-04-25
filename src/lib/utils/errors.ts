@@ -32,3 +32,9 @@ export class KvError_FS_Exists extends KvError {
 
 export class KvError_FS_NotFound extends KvError {
 }
+
+export class KvError_FS_FormatVersion extends KvError {
+    constructor(found: number, expected: number) {
+        super(`On-disk format version "${found}" is not supported by this build (expects "${expected}"). The volume needs to be reformatted or migrated.`);
+    }
+}

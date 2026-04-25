@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=acceptance",
+    "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPatterns=acceptance",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "start-local-fs": "tsx src/examples/example-local-fs.ts",
     "start-memory": "tsx src/examples/example-memory.ts",

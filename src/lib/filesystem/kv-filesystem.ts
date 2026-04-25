@@ -29,7 +29,7 @@ export class KvFilesystem {
     }
 
     @Init
-    public async getFile(name: string, directory: KvINodeDirectory): Promise<KvINodeFile> {
+    public async getKvFile(name: string, directory: KvINodeDirectory): Promise<KvINodeFile> {
         const iNodeId = await directory.getEntry(name);
         if (iNodeId === undefined) {
             throw new KvError_FS_NotFound(`File with the name "${name}" does not exist in given INode.`);

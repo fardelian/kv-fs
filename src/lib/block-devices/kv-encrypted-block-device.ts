@@ -23,14 +23,12 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
         return this.blockDevice.getBlockSize();
     }
 
-    @Init
     public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         const encryptedData = await this.blockDevice.readBlock(blockId);
 
         return this.encryption.decrypt(encryptedData);
     }
 
-    @Init
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
         if (data.length > this.getBlockSize()) {
             throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.getBlockSize()}" bytes.`);
@@ -43,17 +41,14 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
         return this.blockDevice.writeBlock(blockId, encryptedData);
     }
 
-    @Init
     public async freeBlock(blockId: INodeId): Promise<void> {
         return this.blockDevice.freeBlock(blockId);
     }
 
-    @Init
     public async existsBlock(blockId: INodeId): Promise<boolean> {
         return this.blockDevice.existsBlock(blockId);
     }
 
-    @Init
     public async allocateBlock(): Promise<INodeId> {
         return this.blockDevice.allocateBlock();
     }

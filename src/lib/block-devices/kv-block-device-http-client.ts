@@ -1,7 +1,6 @@
 import { KvBlockDevice } from './kv-block-device.base';
 import { INodeId } from '../inode';
 import { KvEncryption } from '../encryption';
-import { Init } from '../utils/init';
 import { KvError_BD_Overflow } from '../utils/errors';
 
 /** KvBlockDevice which uses a remote HTTP server. */
@@ -33,7 +32,6 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
     }
 
     /** Read using GET /blocks/:blockId */
-    @Init
     public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         const blockUrl = this.getBlockUrl(blockId);
         const res = await this.request(blockUrl);
@@ -44,7 +42,6 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
     }
 
     /** Write using POST /blocks/:blockId */
-    @Init
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
         if (data.length > this.getBlockSize()) {
             throw new KvError_BD_Overflow(`Data size "${data.length}" bytes exceeds block size "${this.getBlockSize()}" bytes.`);
@@ -63,7 +60,6 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
     }
 
     /** Delete using DELETE /blocks/:blockId */
-    @Init
     public async freeBlock(blockId: INodeId): Promise<void> {
         const blockUrl = this.getBlockUrl(blockId);
 
@@ -71,7 +67,6 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
     }
 
     /** Check if block exists using HEAD /blocks/:blockId */
-    @Init
     public async existsBlock(blockId: INodeId): Promise<boolean> {
         const blockUrl = this.getBlockUrl(blockId);
         const res = await fetch(blockUrl, { method: 'HEAD' });
@@ -80,7 +75,6 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
     }
 
     /** Get next block ID using PUT /blocks */
-    @Init
     public async allocateBlock(): Promise<INodeId> {
         const res = await this.request(`${this.baseUrl}/blocks`, { method: 'PUT' });
         const resBody = await res.json() as { data: { nextBlockId: INodeId } };

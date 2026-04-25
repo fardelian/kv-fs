@@ -1,29 +1,31 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
-import { KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
+import { KvBlockDevice, KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvEncryptionNone } from '../lib/encryption';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
 const TOTAL_NODES = 100;
 
+const ROOT_DIRECTORY_ID = 1;
 const SUPER_BLOCK_ID = 0;
 
 async function run() {
     const t0 = new Date().getTime();
 
-    // Create block device
-
-    const encryption = new KvEncryptionNone();
+    // Create memory block device
 
     const memoryBlockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
 
-    const encryptedMemoryBlockDevice = new KvEncryptedBlockDevice(memoryBlockDevice, encryption);
+    // Create file system and wrap it with KvFilesystemEasy to simplify access
 
-    // Create file system
+    const fileSystem = await KvFilesystem.format(
+        memoryBlockDevice,
+        TOTAL_BLOCKS,
+        TOTAL_NODES,
+        ROOT_DIRECTORY_ID,
+        SUPER_BLOCK_ID,
+    );
 
-    await KvFilesystem.format(encryptedMemoryBlockDevice, TOTAL_BLOCKS, TOTAL_NODES);
-
-    const fileSystem = new KvFilesystem(encryptedMemoryBlockDevice, SUPER_BLOCK_ID);
     const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
 
     // Create test files

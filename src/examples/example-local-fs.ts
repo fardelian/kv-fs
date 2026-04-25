@@ -16,7 +16,7 @@ mkdirSync(LOCAL_FS_PATH, { recursive: true });
 async function run() {
     const t0 = new Date().getTime();
 
-    // Create block device
+    // Create encrypted block device
 
     const encryption = new KvEncryptionNone();
 

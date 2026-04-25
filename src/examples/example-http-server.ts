@@ -18,6 +18,8 @@ mkdirSync(LOCAL_FS_PATH, { recursive: true });
 async function run() {
     const encryption = new KvEncryptionNone();
 
+    // Create backend block device (encrypted, using sqlite)
+
     const database = await new Promise<Database>((resolve, reject) => {
         const db = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {
             err ? reject(err) : resolve(db);
@@ -32,11 +34,16 @@ async function run() {
 
     const encryptedServerBlockDevice = new KvEncryptedBlockDevice(sqliteBlockDevice, encryption);
 
-    const server = express();
+    // Create express router mapping HTTP endpoints to block device operations
+
     const router = express.Router();
     const bdRouter = new KvBlockDeviceExpressRouter();
-    server.use(express.json());
     bdRouter.route(encryptedServerBlockDevice, router);
+
+    // Start express app
+
+    const server = express();
+    server.use(express.json());
     server.use(router);
 
     return new Promise<void>((resolve) => {

@@ -41,6 +41,7 @@ describe('kv-fs (acceptance)', () => {
         const fs = await makeFs();
 
         await fs.createDirectory('/home/florin', true);
+        await fs.createDirectory('/home/cat', true);
         await fs.createFile('/home/florin/note.txt');
 
         const root = await fs.readDirectory('/');
@@ -48,11 +49,11 @@ describe('kv-fs (acceptance)', () => {
         const florin = await fs.readDirectory('/home/florin');
 
         expect(root).toContain('home');
-        expect(home).toContain('florin');
+        expect(home).toEqual(['florin', 'cat']);
         expect(florin).toContain('note.txt');
     });
 
-    it('overwrites a file (second write wins)', async () => {
+    it('rewinds with setpos and writes over existing content', async () => {
         const fs = await makeFs();
         await fs.createDirectory('/data', true);
 
@@ -60,8 +61,11 @@ describe('kv-fs (acceptance)', () => {
         const file = await fs.createFile(path);
 
         await file.write(encoder.encode('first'));
+        await file.setPos(0);
         await file.write(encoder.encode('second'));
 
+        // "second" (6 bytes) is longer than "first" (5), so positions 0-5 are
+        // fully covered by the second write; the file ends up exactly "second".
         expect(decoder.decode(await fs.readFile(path))).toBe('second');
     });
 
@@ -70,8 +74,8 @@ describe('kv-fs (acceptance)', () => {
         await fs.createDirectory('/tmp', true);
 
         const path = '/tmp/disposable.txt';
-        const file = await fs.createFile(path);
-        await file.write(encoder.encode('temporary'));
+        await fs.createDirectory(path);
+        await fs.writeFile(path, encoder.encode('temporary'));
 
         expect(decoder.decode(await fs.readFile(path))).toBe('temporary');
 

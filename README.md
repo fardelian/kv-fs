@@ -85,6 +85,18 @@ That's the whole model. Reading a directory means reading its inode block and pa
 
 `KvFilesystemEasy` is a thin convenience layer on top — it walks paths for you so callers don't have to resolve each path component by hand.
 
+### Files have a position
+
+[`KvINodeFile`](src/lib/inode/kv-inode-file.ts) keeps a current read/write position, like an open `FILE *` in C. The shape is loosely modeled on POSIX:
+
+- `getPos()` — current offset, in bytes from the start. (`ftell` analogue.)
+- `setPos(n)` — move the offset. Setting it past EOF **extends** the file with zero bytes (POSIX `lseek` doesn't extend; this method does, by design).
+- `truncate(n)` — set the size, like POSIX `ftruncate(3p)`. Extending zero-fills; shrinking frees trailing data blocks. Position is not modified.
+- `read(length?)` — read up to `length` bytes (or to EOF if omitted) from the current position; advances the position.
+- `write(data)` — write `data` at the current position; advances the position; extends the file if it spills past EOF; **does not shrink** when overwriting in place — use `truncate(0)` first if you want a full replace.
+
+The "extended area shall appear as if it were zero-filled" guarantee holds across `truncate`-shrink-then-extend too: shrinking zeroes the partial tail of the last retained block before freeing the rest, so a later extend reads as zero rather than uncovering stale bytes.
+
 ## Try it
 
 ```bash
@@ -96,6 +108,15 @@ npm run start-sqlite       # filesystem backed by a SQLite database
 npm run start-http-server  # serve a block device over HTTP
 npm run start-http-client  # in another terminal: mount the remote block device as a filesystem
 ```
+
+All examples output the same thing.
+
+The simplest example is in `src/examples/example-memory.ts`. Start from there, read it and play around with it.
+
+For a more complex example, run `start-http-server` in a terminal and then `start-http-client` in another one.
+The HTTP server uses the express router in `src/lib/block-devices/kv-block-device-express-router.ts`
+to map Block Device methods to HTTP endpoints. Note that both the client and the server implement encryption.
+This is redundant as it should only be in the client, but it's still good practice to encrypt data stored on servers.
 
 ## Tests
 

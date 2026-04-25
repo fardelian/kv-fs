@@ -6,6 +6,7 @@
   "author": "Ardelian Florin <florin@ardelian.ro>",
   "license": "PROPRIETARY",
   "scripts": {
+    "build": "tsc",
     "start-local-fs": "ts-node src/examples/example-local-fs.ts",
     "start-sqlite": "ts-node src/examples/example-sqlite.ts",
     "start-http-server": "ts-node src/examples/example-http-server.ts",

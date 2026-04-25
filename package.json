@@ -6,22 +6,22 @@
   "author": "Ardelian Florin <florin@ardelian.ro>",
   "license": "PROPRIETARY",
   "scripts": {
-    "build": "tsc",
-    "start-local-fs": "ts-node src/examples/example-local-fs.ts",
-    "start-sqlite": "ts-node src/examples/example-sqlite.ts",
-    "start-http-server": "ts-node src/examples/example-http-server.ts",
-    "start-http-client": "ts-node src/examples/example-http-client.ts"
+    "typecheck": "tsc --noEmit",
+    "start-local-fs": "tsx src/examples/example-local-fs.ts",
+    "start-sqlite": "tsx src/examples/example-sqlite.ts",
+    "start-http-server": "tsx src/examples/example-http-server.ts",
+    "start-http-client": "tsx src/examples/example-http-client.ts"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.6.0",
     "@types/sqlite3": "^5.1.0",
-    "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   },
   "dependencies": {
     "express": "^5.2.1",
     "express-router": "^0.0.1",
-    "sqlite3": "^6.0.1"
+    "sqlite3": "^6.0.1",
+    "tsx": "^4.21.0"
   }
 }

@@ -68,7 +68,7 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
     }
 
     @Init
-    public async getNextINodeId(): Promise<INodeId> {
+    public async allocateBlock(): Promise<INodeId> {
         return new Promise<INodeId>((resolve, reject) => {
             this.database.get(
                 'SELECT MAX(id) AS maxId FROM blocks',

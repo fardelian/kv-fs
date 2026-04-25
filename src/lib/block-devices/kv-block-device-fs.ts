@@ -54,7 +54,7 @@ export class KvBlockDeviceFs extends KvBlockDevice {
     }
 
     @Init
-    public async getNextINodeId(): Promise<INodeId> {
+    public async allocateBlock(): Promise<INodeId> {
         let blockId = 0;
         while (await this.existsBlock(blockId)) {
             blockId++;

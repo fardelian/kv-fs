@@ -54,7 +54,7 @@ export class KvFilesystem {
 
     @Init
     public async createDirectory(name: string, directory: KvINodeDirectory): Promise<KvINodeDirectory> {
-        const id = await this.blockDevice.getNextINodeId();
+        const id = await this.blockDevice.allocateBlock();
         const newDirectory = await KvINodeDirectory.createEmptyDirectory(this.blockDevice, id);
         await directory.addEntry(name, newDirectory.id);
 

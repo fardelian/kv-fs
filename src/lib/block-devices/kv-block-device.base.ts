@@ -22,5 +22,5 @@ export abstract class KvBlockDevice {
 
     public abstract existsBlock(blockId: INodeId): Promise<boolean>;
 
-    public abstract getNextINodeId(): Promise<INodeId>;
+    public abstract allocateBlock(): Promise<INodeId>;
 }

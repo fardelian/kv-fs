@@ -80,7 +80,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
 
     /** Get next block ID using PUT /blocks */
     @Init
-    public async getNextINodeId(): Promise<INodeId> {
+    public async allocateBlock(): Promise<INodeId> {
         const res = await this.request(`${this.baseUrl}/blocks`, { method: 'PUT' });
         const resBody = await res.json() as { data: { nextBlockId: INodeId } };
 

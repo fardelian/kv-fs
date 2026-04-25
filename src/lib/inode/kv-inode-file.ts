@@ -48,7 +48,7 @@ export class KvINodeFile extends INode<Buffer> {
         // If more blocks are required, allocate them
 
         while (this.dataBlockIds.length < requiredBlocks) {
-            this.dataBlockIds.push(await this.blockDevice.getNextINodeId());
+            this.dataBlockIds.push(await this.blockDevice.allocateBlock());
         }
 
         // If less blocks are required, free them
@@ -95,7 +95,7 @@ export class KvINodeFile extends INode<Buffer> {
     }
 
     public static async createEmptyFile(blockDevice: KvBlockDevice): Promise<KvINodeFile> {
-        const id = await blockDevice.getNextINodeId();
+        const id = await blockDevice.allocateBlock();
         const creationTime = new Date();
         const modificationTime = new Date();
 

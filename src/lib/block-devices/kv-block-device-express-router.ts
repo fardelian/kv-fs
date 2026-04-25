@@ -5,7 +5,7 @@ export class KvBlockDeviceExpressRouter {
     public route(blockDevice: KvBlockDevice, router: Router): void {
         router
             .put('/blocks', async (req, res) => {
-                const nextBlockId = await blockDevice.getNextINodeId();
+                const nextBlockId = await blockDevice.allocateBlock();
                 res.send({ data: { nextBlockId } });
             })
 

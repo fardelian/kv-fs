@@ -54,7 +54,7 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
     }
 
     @Init
-    public async getNextINodeId(): Promise<INodeId> {
-        return this.blockDevice.getNextINodeId();
+    public async allocateBlock(): Promise<INodeId> {
+        return this.blockDevice.allocateBlock();
     }
 }

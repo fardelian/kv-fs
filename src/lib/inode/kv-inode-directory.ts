@@ -1,6 +1,6 @@
 import { INode, INodeId } from './helpers/kv-inode';
 import { KvBlockDevice } from '../block-devices';
-import { Init, dataView, utf8Decode, utf8Encode, KvError_INode_NameOverflow } from '../utils';
+import { Init, dataView, utf8Decode, utf8Encode, KvError_FS_NotFound, KvError_INode_NameOverflow } from '../utils';
 
 type DirectoryEntriesList = Map<string, INodeId>;
 
@@ -73,8 +73,17 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     }
 
     @Init
-    public async getEntry(name: string): Promise<INodeId | undefined> {
-        return this.entries.get(name);
+    public async getEntry(name: string): Promise<INodeId> {
+        const iNodeId = this.entries.get(name);
+        if (iNodeId === undefined) {
+            throw new KvError_FS_NotFound(`Directory entry "${name}" not found.`);
+        }
+        return iNodeId;
+    }
+
+    @Init
+    public async hasEntry(name: string): Promise<boolean> {
+        return this.entries.has(name);
     }
 
     public static async createEmptyDirectory(blockDevice: KvBlockDevice, blockId: INodeId): Promise<KvINodeDirectory> {

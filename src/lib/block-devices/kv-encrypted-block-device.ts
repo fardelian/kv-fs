@@ -28,7 +28,7 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
             throw new Error(`Wrapped device's block size (${innerBlockSize}) is too small for encryption overhead (${encryption.overheadBytes}).`);
         }
 
-        super(exposedBlockSize, blockDevice.getMaxBlockId() * exposedBlockSize);
+        super(exposedBlockSize, blockDevice.getCapacityBlocks());
 
         this.blockDevice = blockDevice;
         this.encryption = encryption;
@@ -66,5 +66,9 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
 
     public async getHighestBlockId(): Promise<INodeId> {
         return await this.blockDevice.getHighestBlockId();
+    }
+
+    public async format(): Promise<void> {
+        await this.blockDevice.format();
     }
 }

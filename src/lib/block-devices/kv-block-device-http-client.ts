@@ -27,7 +27,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         const res = await this.request(`${this.baseUrl}/blocks`);
         const body = await res.json() as { data: KvBlockDeviceMetadata };
         this.blockSize = body.data.blockSize;
-        this.capacityBytes = body.data.blockSize * body.data.maxBlockId;
+        this.capacityBlocks = body.data.capacityBlocks;
     }
 
     protected getBlockUrl(blockId: INodeId): string {
@@ -52,7 +52,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         return Uint8Array.from(resBody.data.blockData);
     }
 
-    /** Write using POST /blocks/:blockId */
+    /** Write using PUT /blocks/:blockId */
     @Init
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
         if (data.length > this.getBlockSize()) {
@@ -64,7 +64,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
 
         const blockUrl = this.getBlockUrl(blockId);
         await this.request(blockUrl, {
-            method: 'POST',
+            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ data: { blockData: Array.from(blockData) } }),
         });
@@ -87,13 +87,13 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         return res.status === 200;
     }
 
-    /** Get next block ID using PUT /blocks */
+    /** Allocate a new block ID using POST /blocks (no body). */
     @Init
     public async allocateBlock(): Promise<INodeId> {
-        const res = await this.request(`${this.baseUrl}/blocks`, { method: 'PUT' });
-        const resBody = await res.json() as { data: { nextBlockId: INodeId } };
+        const res = await this.request(`${this.baseUrl}/blocks`, { method: 'POST' });
+        const resBody = await res.json() as { data: { blockId: INodeId } };
 
-        return resBody.data.nextBlockId;
+        return resBody.data.blockId;
     }
 
     /**
@@ -106,5 +106,14 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         const res = await this.request(`${this.baseUrl}/blocks`);
         const body = await res.json() as { data: KvBlockDeviceMetadata };
         return body.data.highestBlockId;
+    }
+
+    /**
+     * Wipe every block on the remote device. Maps to DELETE /blocks on
+     * the server, with the `?yes` deliberate-action gate the server
+     * requires. Use with care — this is a destructive operation.
+     */
+    public async format(): Promise<void> {
+        await this.request(`${this.baseUrl}/blocks?yes`, { method: 'DELETE' });
     }
 }

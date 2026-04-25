@@ -22,7 +22,7 @@ export class KvFilesystemEasy {
 
         const directory = await this.getDirectory(path.join(this.separator));
 
-        if (await directory.getEntry(fileName) !== undefined) {
+        if (await directory.hasEntry(fileName)) {
             throw new KvError_FS_Exists(`File "${pathName}" already exists.`);
         }
 

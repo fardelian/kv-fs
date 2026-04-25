@@ -29,14 +29,15 @@ export class SuperBlock {
     public static async createSuperBlock(
         id: INodeId,
         blockDevice: KvBlockDevice,
-        totalBlocks: number,
         totalInodes: number,
         rootDirectory: INodeId,
     ): Promise<SuperBlock> {
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
 
-        view.setInt32(0, totalBlocks, false);
+        // The block count comes straight off the device — the
+        // filesystem doesn't get to override it.
+        view.setInt32(0, blockDevice.getCapacityBlocks(), false);
         view.setInt32(4, blockDevice.getBlockSize(), false);
         view.setInt32(8, totalInodes, false);
         view.setInt32(12, rootDirectory, false);

@@ -2,20 +2,15 @@ import { describe, it, expect } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvINodeFile } from './kv-inode-file';
-import { INodeId } from './helpers/kv-inode';
 
 // 1 KiB blocks leave 1004 bytes for data-block-id pointers in the inode
 // (block size minus the 20-byte header), with plenty of room left if we want
 // to add more metadata fields later.
 const BLOCK_SIZE = 1024;
-const CAPACITY_BYTES = BLOCK_SIZE * 64;
-
-interface PublicBlockDevice {
-    blocks: Map<INodeId, Uint8Array>;
-}
+const CAPACITY_BLOCKS = 64;
 
 async function makeFile() {
-    const device = new KvBlockDeviceMemory(BLOCK_SIZE, CAPACITY_BYTES);
+    const device = new KvBlockDeviceMemory(BLOCK_SIZE, CAPACITY_BLOCKS);
     const file = await KvINodeFile.createEmptyFile(device);
     return { device, file };
 }
@@ -75,28 +70,26 @@ describe('KvINodeFile', () => {
 
         it('within the current size just moves the pointer (no allocation)', async () => {
             const { device, file } = await makeFile();
-            const blocks = (device as unknown as PublicBlockDevice).blocks;
             await file.write(pattern(BLOCK_SIZE / 2));
-            const blocksBefore = blocks.size;
+            const blocksBefore = device._dumpBlocks().length;
 
             await file.setPos(10);
 
             expect(file.getPos()).toBe(10);
-            expect(blocks.size).toBe(blocksBefore);
+            expect(device._dumpBlocks().length).toBe(blocksBefore);
             expect(file.size).toBe(BLOCK_SIZE / 2);
         });
 
         it('to exactly EOF does not extend or allocate', async () => {
             const { device, file } = await makeFile();
-            const blocks = (device as unknown as PublicBlockDevice).blocks;
             await file.write(pattern(BLOCK_SIZE * 2));
-            const blocksBefore = blocks.size;
+            const blocksBefore = device._dumpBlocks().length;
 
             await file.setPos(BLOCK_SIZE * 2);
 
             expect(file.getPos()).toBe(BLOCK_SIZE * 2);
             expect(file.size).toBe(BLOCK_SIZE * 2);
-            expect(blocks.size).toBe(blocksBefore);
+            expect(device._dumpBlocks().length).toBe(blocksBefore);
         });
 
         it('past EOF extends the file with zero bytes (across multiple blocks)', async () => {
@@ -179,15 +172,14 @@ describe('KvINodeFile', () => {
 
         it('shrinks by freeing trailing data blocks', async () => {
             const { device, file } = await makeFile();
-            const blocks = (device as unknown as PublicBlockDevice).blocks;
             await file.write(pattern(BLOCK_SIZE * 5));
-            const fullBlockCount = blocks.size;
+            const fullBlockCount = device._dumpBlocks().length;
 
             await file.truncate(BLOCK_SIZE);
 
             expect(file.size).toBe(BLOCK_SIZE);
             // 4 trailing data blocks should be freed.
-            expect(blocks.size).toBe(fullBlockCount - 4);
+            expect(device._dumpBlocks().length).toBe(fullBlockCount - 4);
 
             await file.setPos(0);
             const remaining = await file.read();
@@ -239,7 +231,7 @@ describe('KvINodeFile', () => {
 
             expect(file.size).toBe(0);
             // Only the inode block should remain.
-            expect((device as unknown as PublicBlockDevice).blocks.size).toBe(1);
+            expect(device._dumpBlocks().length).toBe(1);
             await file.setPos(0);
             const data = await file.read();
             expect(data.length).toBe(0);

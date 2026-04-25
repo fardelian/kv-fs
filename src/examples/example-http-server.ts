@@ -6,7 +6,7 @@ import {
 import { KvEncryptionRot13 } from '../lib/encryption';
 import express from 'express';
 import { mkdirSync } from 'fs';
-import { Database } from 'sqlite3';
+import { AsyncDatabase } from 'promised-sqlite3';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -20,20 +20,13 @@ async function run() {
 
     // Create backend block device (encrypted, using sqlite)
 
-    const database = await new Promise<Database>((resolve, reject) => {
-        const db: Database = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(db);
-            }
-        });
-    });
+    const database = await AsyncDatabase.open(`${LOCAL_FS_PATH}/data.sqlite3`);
 
     const sqliteBlockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
-        BLOCK_SIZE * TOTAL_BLOCKS,
+        TOTAL_BLOCKS,
         database,
+        'blocks',
     );
 
     const encryptedServerBlockDevice = new KvEncryptedBlockDevice(sqliteBlockDevice, encryption);

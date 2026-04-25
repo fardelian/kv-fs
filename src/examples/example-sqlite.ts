@@ -3,7 +3,7 @@ import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { KvEncryptionRot13 } from '../lib/encryption';
 import { mkdirSync } from 'fs';
 import { KvEncryptedBlockDevice } from '../lib/block-devices';
-import { Database } from 'sqlite3';
+import { AsyncDatabase } from 'promised-sqlite3';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -21,27 +21,20 @@ async function run() {
 
     const encryption = new KvEncryptionRot13();
 
-    const database = await new Promise<Database>((resolve, reject) => {
-        const db: Database = new Database(`${LOCAL_FS_PATH}/data.sqlite3`, (err) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(db);
-            }
-        });
-    });
+    const database = await AsyncDatabase.open(`${LOCAL_FS_PATH}/data.sqlite3`);
 
     const sqliteBlockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
-        BLOCK_SIZE * TOTAL_BLOCKS,
+        TOTAL_BLOCKS,
         database,
+        'blocks',
     );
 
     const encryptedFsBlockDevice = new KvEncryptedBlockDevice(sqliteBlockDevice, encryption);
 
     // Create file system
 
-    await KvFilesystem.format(encryptedFsBlockDevice, TOTAL_BLOCKS, TOTAL_NODES);
+    await KvFilesystem.format(encryptedFsBlockDevice, TOTAL_NODES);
 
     const fileSystem = new KvFilesystem(encryptedFsBlockDevice, SUPER_BLOCK_ID);
     const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');

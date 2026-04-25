@@ -63,43 +63,45 @@ describe('SuperBlock', () => {
     });
 
     describe('createSuperBlock', () => {
-        it('writes the superblock to the given ID and returns a SuperBlock instance', async () => {
+        it('writes the superblock to the given ID and uses the device capacity for totalBlocks', async () => {
             const id = faker.number.int({ min: 0, max: 100 });
-            const totalBlocks = faker.number.int({ min: 1, max: 10_000 });
+            const capacityBlocks = faker.number.int({ min: 1, max: 10_000 });
             const totalInodes = faker.number.int({ min: 1, max: 1000 });
             const rootDirectoryId = faker.number.int({ min: 1, max: 100 });
 
-            blockDevice.writeBlock.mockResolvedValueOnce(undefined);
+            // The device advertises this capacity; createSuperBlock should
+            // record it as totalBlocks instead of taking it as a parameter.
+            const sized = new MockBlockDevice(BLOCK_SIZE, capacityBlocks);
+            sized.writeBlock.mockResolvedValueOnce(undefined);
 
             const superBlock = await SuperBlock.createSuperBlock(
                 id,
-                blockDevice,
-                totalBlocks,
+                sized,
                 totalInodes,
                 rootDirectoryId,
             );
 
             expect(superBlock).toBeInstanceOf(SuperBlock);
 
-            expect(blockDevice.writeBlock).toHaveBeenCalledTimes(1);
-            const [writtenId, writtenBuffer] = blockDevice.writeBlock.mock.calls[0];
+            expect(sized.writeBlock).toHaveBeenCalledTimes(1);
+            const [writtenId, writtenBuffer] = sized.writeBlock.mock.calls[0];
 
             expect(writtenId).toBe(id);
             expect(writtenBuffer.length).toBe(BLOCK_SIZE);
 
             const view = dataView(writtenBuffer);
-            expect(view.getInt32(0, false)).toBe(totalBlocks);
+            expect(view.getInt32(0, false)).toBe(capacityBlocks);
             expect(view.getInt32(4, false)).toBe(BLOCK_SIZE);
             expect(view.getInt32(8, false)).toBe(totalInodes);
             expect(view.getInt32(12, false)).toBe(rootDirectoryId);
         });
 
-        it('uses the block device block size for the buffer (not the totalBlocks count)', async () => {
+        it('uses the block device block size for the buffer', async () => {
             const customBlockSize = 8192;
             const customBlockDevice = new MockBlockDevice(customBlockSize);
             customBlockDevice.writeBlock.mockResolvedValueOnce(undefined);
 
-            await SuperBlock.createSuperBlock(0, customBlockDevice, 100, 10, 1);
+            await SuperBlock.createSuperBlock(0, customBlockDevice, 10, 1);
 
             const [, writtenBuffer] = customBlockDevice.writeBlock.mock.calls[0];
             expect(writtenBuffer.length).toBe(customBlockSize);

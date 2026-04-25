@@ -1,6 +1,18 @@
 import { KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
 import { Router } from 'express';
 
+// Parse `:blockId` and validate it falls inside the device's
+// current capacity. Returns -1 to signal "invalid" (per the
+// codebase convention of using -1 instead of null/undefined for
+// block-device-shaped values). Callers then 400 the request.
+const parseBlockId = (blockDevice: KvBlockDevice, id: unknown): number => {
+    const blockId = Number(id);
+    if (!Number.isInteger(blockId) || blockId < 0 || blockId >= blockDevice.getCapacityBlocks()) {
+        return -1;
+    }
+    return blockId;
+};
+
 /**
  * Wires a `KvBlockDevice` up to an Express router so it can be driven
  * remotely over HTTP. `KvBlockDeviceHttpClient` speaks this same wire
@@ -17,24 +29,52 @@ export class KvBlockDeviceHttpRouter {
             .get('/blocks', async (_req, res) => {
                 const meta: KvBlockDeviceMetadata = {
                     blockSize: blockDevice.getBlockSize(),
-                    maxBlockId: blockDevice.getMaxBlockId(),
+                    capacityBlocks: blockDevice.getCapacityBlocks(),
                     highestBlockId: await blockDevice.getHighestBlockId(),
                 };
                 res.send({ data: meta });
             })
 
-            // PUT /blocks — allocate a new block ID. Returns the ID the
-            // device picked; the caller is then expected to POST data to
-            // it (or treat the allocation as reserved).
-            .put('/blocks', async (_req, res) => {
-                const nextBlockId = await blockDevice.allocateBlock();
-                res.send({ data: { nextBlockId } });
+            // POST /blocks — allocate a new block ID and (optionally)
+            // write data to it in the same round-trip. Body is the same
+            // `{ data: { blockData: number[] } }` envelope as PUT
+            // /blocks/:blockId; if omitted the new block is left
+            // uninitialised. Returns the allocated `blockId`.
+            .post('/blocks', async (req, res) => {
+                const blockId = await blockDevice.allocateBlock();
+
+                const body = req.body as { data?: { blockData?: number[] } } | undefined;
+                const blockData = body?.data?.blockData;
+                if (blockData !== undefined) {
+                    await blockDevice.writeBlock(blockId, Uint8Array.from(blockData));
+                }
+
+                res.send({ data: { blockId } });
+            })
+
+            // DELETE /blocks — wipe every block on the device (i.e.
+            // call `blockDevice.format()`). Requires the `?yes` query
+            // string as a deliberate-action gate so a stray DELETE
+            // can't nuke the device. The flag has no value — its mere
+            // presence is the confirmation.
+            .delete('/blocks', async (req, res) => {
+                if (req.query.yes === undefined) {
+                    res.status(403).send({ data: {} });
+                    return;
+                }
+                await blockDevice.format();
+                res.send({ data: { yes: true } });
             })
 
             // HEAD /blocks/:blockId — existence check. 200 = exists, 404 =
-            // doesn't. Cheap because the body is empty.
+            // doesn't, 400 = malformed/out-of-range ID. Cheap because the
+            // body is empty.
             .head('/blocks/:blockId', async (req, res) => {
-                const blockId = Number(req.params.blockId) | 0;
+                const blockId = parseBlockId(blockDevice, req.params.blockId);
+                if (blockId === -1) {
+                    res.status(400).end();
+                    return;
+                }
                 const exists = await blockDevice.existsBlock(blockId);
                 res.status(exists ? 200 : 404).end();
             })
@@ -43,15 +83,24 @@ export class KvBlockDeviceHttpRouter {
             // JSON array of byte values inside the `{ data: { blockData } }`
             // envelope.
             .get('/blocks/:blockId', async (req, res) => {
-                const blockId = Number(req.params.blockId) | 0;
+                const blockId = parseBlockId(blockDevice, req.params.blockId);
+                if (blockId === -1) {
+                    res.status(400).send({ error: `Invalid block ID: ${req.params.blockId}` });
+                    return;
+                }
                 const block = await blockDevice.readBlock(blockId);
                 res.send({ data: { blockData: Array.from(block) } });
             })
 
-            // POST /blocks/:blockId — write one block's bytes. Body is the
-            // mirror of the GET response: `{ data: { blockData: number[] } }`.
-            .post('/blocks/:blockId', async (req, res) => {
-                const blockId = Number(req.params.blockId) | 0;
+            // PUT /blocks/:blockId — write one block's bytes. Replaces
+            // the block at `:blockId` outright. Body is the mirror of
+            // the GET response: `{ data: { blockData: number[] } }`.
+            .put('/blocks/:blockId', async (req, res) => {
+                const blockId = parseBlockId(blockDevice, req.params.blockId);
+                if (blockId === -1) {
+                    res.status(400).send({ error: `Invalid block ID: ${req.params.blockId}` });
+                    return;
+                }
                 const body = req.body as { data: { blockData: number[] } };
                 const data = Uint8Array.from(body.data.blockData);
                 await blockDevice.writeBlock(blockId, data);
@@ -61,7 +110,11 @@ export class KvBlockDeviceHttpRouter {
             // DELETE /blocks/:blockId — free the block. After this,
             // existsBlock should return false until the ID is reallocated.
             .delete('/blocks/:blockId', async (req, res) => {
-                const blockId = Number(req.params.blockId) | 0;
+                const blockId = parseBlockId(blockDevice, req.params.blockId);
+                if (blockId === -1) {
+                    res.status(400).send({ error: `Invalid block ID: ${req.params.blockId}` });
+                    return;
+                }
                 await blockDevice.freeBlock(blockId);
                 res.send({ data: null });
             });

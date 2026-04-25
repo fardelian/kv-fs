@@ -30,27 +30,27 @@ describe('KvBlockDevice (base)', () => {
         });
     });
 
-    describe('getMaxBlockId', () => {
-        it('returns capacityBytes / blockSize when they divide evenly', () => {
-            const blockSize = 4096;
+    describe('getCapacityBlocks', () => {
+        it('returns the capacity passed to the constructor', () => {
             const blocks = faker.number.int({ min: 1, max: 1000 });
-            const device = new MockBlockDevice(blockSize, blockSize * blocks);
+            const device = new MockBlockDevice(4096, blocks);
 
-            expect(device.getMaxBlockId()).toBe(blocks);
+            expect(device.getCapacityBlocks()).toBe(blocks);
         });
 
-        it('floors when capacityBytes is not a multiple of blockSize', () => {
-            const blockSize = 4096;
-            const device = new MockBlockDevice(blockSize, blockSize * 3 + 1234);
+        it('returns the same value across repeated calls', () => {
+            const blocks = faker.number.int({ min: 1, max: 1_000_000 });
+            const device = new MockBlockDevice(4096, blocks);
 
-            expect(device.getMaxBlockId()).toBe(3);
+            expect(device.getCapacityBlocks()).toBe(blocks);
         });
 
-        it('returns 0 when capacityBytes is smaller than blockSize', () => {
-            const blockSize = 4096;
-            const device = new MockBlockDevice(blockSize, blockSize - 1);
+        it('keeps each instance independent', () => {
+            const a = new MockBlockDevice(4096, 7);
+            const b = new MockBlockDevice(4096, 99);
 
-            expect(device.getMaxBlockId()).toBe(0);
+            expect(a.getCapacityBlocks()).toBe(7);
+            expect(b.getCapacityBlocks()).toBe(99);
         });
     });
 });

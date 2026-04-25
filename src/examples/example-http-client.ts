@@ -12,7 +12,7 @@ const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 async function run() {
-    // Pure transport — fetches blockSize/maxBlockId from the server.
+    // Pure transport — fetches blockSize/capacityBlocks from the server.
     const httpClient = new KvBlockDeviceHttpClient(`http://localhost:${PORT}`);
 
     // Peek at what the server advertises before init() does the same fetch.
@@ -27,8 +27,7 @@ async function run() {
     const clientBlockDevice = new KvEncryptedBlockDevice(httpClient, clientEncryption);
 
     // Format and mount.
-    const totalBlocks = clientBlockDevice.getMaxBlockId();
-    await KvFilesystem.format(clientBlockDevice, totalBlocks, TOTAL_INODES);
+    await KvFilesystem.format(clientBlockDevice, TOTAL_INODES);
 
     const fileSystem = new KvFilesystem(clientBlockDevice, SUPER_BLOCK_ID);
     const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');

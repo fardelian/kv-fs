@@ -18,23 +18,22 @@
     "start-http-client": "tsx src/examples/example-http-client.ts"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@faker-js/faker": "^10.4.0",
-    "@stylistic/eslint-plugin": "^5.10.0",
-    "@types/express": "^5.0.6",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^25.6.0",
-    "@types/sqlite3": "^5.1.0",
-    "eslint": "^10.2.1",
-    "jest": "^30.3.0",
-    "ts-jest": "^29.4.9",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.0"
+    "@eslint/js": "10.0.1",
+    "@faker-js/faker": "10.4.0",
+    "@stylistic/eslint-plugin": "5.10.0",
+    "@types/express": "5.0.6",
+    "@types/jest": "30.0.0",
+    "@types/node": "25.6.0",
+    "eslint": "10.2.1",
+    "jest": "30.3.0",
+    "ts-jest": "29.4.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.59.0"
   },
   "dependencies": {
-    "express": "^5.2.1",
-    "express-router": "^0.0.1",
-    "sqlite3": "^6.0.1",
-    "tsx": "^4.21.0"
+    "express": "5.2.1",
+    "express-router": "0.0.1",
+    "promised-sqlite3": "2.1.0",
+    "tsx": "4.21.0"
   }
 }

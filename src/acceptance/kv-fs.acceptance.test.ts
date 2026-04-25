@@ -3,36 +3,30 @@ import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
 import { KvEncryptionRot13 } from '../lib/encryption';
-import { INodeId } from '../lib/inode';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
 const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
-interface PublicBlockDevice {
-    blocks: Map<INodeId, Uint8Array>;
-}
-
 async function makeFs(): Promise<KvFilesystemEasy> {
-    const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
-    await KvFilesystem.format(blockDevice, TOTAL_BLOCKS, TOTAL_INODES);
+    const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, TOTAL_BLOCKS);
+    await KvFilesystem.format(blockDevice, TOTAL_INODES);
     const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
     return new KvFilesystemEasy(filesystem, '/');
 }
 
 async function makeRot13Fs(): Promise<{ fs: KvFilesystemEasy; underlying: KvBlockDeviceMemory }> {
-    const underlying = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
+    const underlying = new KvBlockDeviceMemory(BLOCK_SIZE, TOTAL_BLOCKS);
     const encrypted = new KvEncryptedBlockDevice(underlying, new KvEncryptionRot13());
-    await KvFilesystem.format(encrypted, TOTAL_BLOCKS, TOTAL_INODES);
+    await KvFilesystem.format(encrypted, TOTAL_INODES);
     const filesystem = new KvFilesystem(encrypted, SUPER_BLOCK_ID);
     return { fs: new KvFilesystemEasy(filesystem, '/'), underlying };
 }
 
 /** Search every block of an in-memory device for the given byte sequence. */
 function anyBlockContains(device: KvBlockDeviceMemory, needle: Uint8Array): boolean {
-    const blocks = (device as unknown as PublicBlockDevice).blocks;
-    for (const block of blocks.values()) {
+    for (const block of device._dumpBlocks()) {
         outer: for (let i = 0; i <= block.length - needle.length; i++) {
             for (let j = 0; j < needle.length; j++) {
                 if (block[i + j] !== needle[j]) continue outer;
@@ -114,14 +108,14 @@ describe('kv-fs (acceptance)', () => {
     });
 
     it('reports highestBlockId climbing as the filesystem allocates blocks', async () => {
-        const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
+        const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, TOTAL_BLOCKS);
 
         // Fresh device: nothing allocated yet.
         expect(await blockDevice.getHighestBlockId()).toBe(-1);
 
         // After format(), at least the superblock + the inode-bitmap blocks
         // have been written, so the highest allocated ID is no longer -1.
-        await KvFilesystem.format(blockDevice, TOTAL_BLOCKS, TOTAL_INODES);
+        await KvFilesystem.format(blockDevice, TOTAL_INODES);
         const highestAfterFormat = await blockDevice.getHighestBlockId();
         expect(highestAfterFormat).toBeGreaterThanOrEqual(0);
 

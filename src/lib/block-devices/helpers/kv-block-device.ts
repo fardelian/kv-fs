@@ -19,12 +19,13 @@ export interface KvBlockDeviceMetadata {
     blockSize: number;
 
     /**
-     * Capacity ceiling: how many blocks the device could hold at the
-     * moment this metadata was produced. Dynamic — a device may be
-     * resized at runtime (e.g. attaching more backing storage). Treat
-     * each fetch as a snapshot.
+     * Capacity in blocks: how many blocks the device could hold at the
+     * moment this metadata was produced. Valid block IDs are
+     * `0..capacityBlocks-1`. Dynamic — a device may be resized at
+     * runtime (e.g. attaching more backing storage). Treat each fetch
+     * as a snapshot.
      */
-    maxBlockId: number;
+    capacityBlocks: number;
 
     /**
      * The largest block ID currently allocated on the device, or `-1`
@@ -36,19 +37,19 @@ export interface KvBlockDeviceMetadata {
 
 export abstract class KvBlockDevice {
     protected blockSize: number;
-    protected capacityBytes: number;
+    protected capacityBlocks: number;
 
-    constructor(blockSize: number, capacityBytes: number) {
+    constructor(blockSize: number, capacityBlocks: number) {
         this.blockSize = blockSize;
-        this.capacityBytes = capacityBytes;
+        this.capacityBlocks = capacityBlocks;
     }
 
     public getBlockSize(): number {
         return this.blockSize;
     }
 
-    public getMaxBlockId(): number {
-        return Math.floor(this.capacityBytes / this.blockSize);
+    public getCapacityBlocks(): number {
+        return this.capacityBlocks;
     }
 
     public abstract readBlock(blockId: INodeId): Promise<Uint8Array>;
@@ -67,4 +68,6 @@ export abstract class KvBlockDevice {
      * each call; never cache the result.
      */
     public abstract getHighestBlockId(): Promise<INodeId>;
+
+    public abstract format(): Promise<void>;
 }

@@ -97,6 +97,19 @@ npm run start-http-server  # serve a block device over HTTP
 npm run start-http-client  # in another terminal: mount the remote block device as a filesystem
 ```
 
+## Tests
+
+Two flavors:
+
+- **Unit tests** live next to the code they test (`src/**/*.test.ts`). They cover individual classes in isolation, using mocks for any I/O.
+- **Acceptance tests** live in [`src/acceptance/`](src/acceptance/). They drive the public API end-to-end against an in-memory backend, the same way the examples do — but as automated checks.
+
+```bash
+npm test                 # run everything (unit + acceptance)
+npm run test:acceptance  # only the acceptance suite
+npm run typecheck        # type-only check across the project
+```
+
 ## Author
 
 Florin Ardelian — <florin@ardelian.ro>

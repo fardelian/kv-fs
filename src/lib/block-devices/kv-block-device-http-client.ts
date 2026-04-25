@@ -38,7 +38,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         const resBody = await res.json() as { data: { blockData: number[] } };
 
         const blockData = Uint8Array.from(resBody.data.blockData);
-        return await this.encryption.decrypt(blockData);
+        return await this.encryption.decrypt(blockId, blockData);
     }
 
     /** Write using POST /blocks/:blockId */
@@ -49,7 +49,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
 
         const blockData = new Uint8Array(this.getBlockSize());
         blockData.set(data);
-        const encryptedData = await this.encryption.encrypt(blockData);
+        const encryptedData = await this.encryption.encrypt(blockId, blockData);
 
         const blockUrl = this.getBlockUrl(blockId);
         await this.request(blockUrl, {

@@ -31,11 +31,18 @@ export class KvEncryptionCaesar extends KvEncryption {
         this.reverseShift = (size - this.forwardShift) % size;
     }
 
-    public async encrypt(data: Uint8Array): Promise<Uint8Array> {
+    /** Caesar is length-preserving — same output regardless of where it lands. */
+    public readonly overheadBytes = 0;
+
+    // The block-level tweak doesn't change Caesar's output (the cipher has
+    // no per-block context), but the parameter is part of the unified
+    // `KvEncryption` API so tweakable schemes (XTS) and untweakable ones
+    // share a single shape.
+    public async encrypt(_blockId: number, data: Uint8Array): Promise<Uint8Array> {
         return this.applyShift(data, this.forwardShift);
     }
 
-    public async decrypt(data: Uint8Array): Promise<Uint8Array> {
+    public async decrypt(_blockId: number, data: Uint8Array): Promise<Uint8Array> {
         return this.applyShift(data, this.reverseShift);
     }
 

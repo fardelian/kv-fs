@@ -17,24 +17,18 @@ export class KvFilesystemEasy {
     // File operations
 
     public async createFile(pathName: string): Promise<KvINodeFile> {
-        const path = pathName.split(this.separator);
-        const fileName = path.pop()!;
+        const { parent, leaf } = await this.resolveLeaf(pathName);
 
-        const directory = await this.getDirectory(path.join(this.separator));
-
-        if (await directory.hasEntry(fileName)) {
+        if (await parent.hasEntry(leaf)) {
             throw new KvError_FS_Exists(`File "${pathName}" already exists.`);
         }
 
-        return await this.filesystem.createFile(fileName, directory);
+        return await this.filesystem.createFile(leaf, parent);
     }
 
     public async getKvFile(pathName: string): Promise<KvINodeFile> {
-        const path = pathName.split(this.separator);
-        const fileName = path.pop()!;
-
-        const directory = await this.getDirectory(path.join(this.separator));
-        return await this.filesystem.getKvFile(fileName, directory);
+        const { parent, leaf } = await this.resolveLeaf(pathName);
+        return await this.filesystem.getKvFile(leaf, parent);
     }
 
     public async readFile(pathName: string): Promise<Uint8Array> {
@@ -51,11 +45,14 @@ export class KvFilesystemEasy {
     // Directory operations
 
     public async createDirectory(pathName: string, createPath = false): Promise<KvINodeDirectory> {
-        const path = pathName.split(this.separator).slice(1);
-        const directoryName = path.pop()!;
+        const components = this.splitPath(pathName);
+        const leaf = components.pop();
+        if (leaf === undefined) {
+            throw new KvError_FS_Exists(`Cannot create root directory "${pathName}" — it always exists.`);
+        }
 
         let directory = await this.filesystem.getRootDirectory();
-        for (const name of path) {
+        for (const name of components) {
             try {
                 directory = await this.filesystem.getDirectory(name, directory);
             } catch (err) {
@@ -64,23 +61,18 @@ export class KvFilesystemEasy {
             }
         }
 
-        return await this.filesystem.createDirectory(directoryName, directory);
+        return await this.filesystem.createDirectory(leaf, directory);
     }
 
     public async getDirectory(pathName: string): Promise<KvINodeDirectory> {
-        const path = pathName.split(this.separator).slice(1);
-        const directoryName = path.pop()!;
+        const components = this.splitPath(pathName);
 
         let directory = await this.filesystem.getRootDirectory();
-        if (directoryName === '') {
-            return directory;
-        }
-
-        for (const name of path) {
+        for (const name of components) {
             directory = await this.filesystem.getDirectory(name, directory);
         }
 
-        return await this.filesystem.getDirectory(directoryName, directory);
+        return directory;
     }
 
     public async readDirectory(pathName: string): Promise<string[]> {
@@ -93,10 +85,37 @@ export class KvFilesystemEasy {
     // Common operations
 
     public async unlink(pathName: string): Promise<void> {
-        const path = pathName.split(this.separator);
-        const fileName = path.pop()!;
+        const { parent, leaf } = await this.resolveLeaf(pathName);
+        await this.filesystem.unlink(leaf, parent);
+    }
 
-        const directory = await this.getDirectory(path.join(this.separator));
-        await this.filesystem.unlink(fileName, directory);
+    /**
+     * Split an absolute path into its non-empty components, dropping the
+     * leading separator and any empty segments produced by leading,
+     * trailing, or duplicated separators. The root path "/" yields `[]`.
+     */
+    private splitPath(pathName: string): string[] {
+        return pathName.split(this.separator).filter((segment) => segment !== '');
+    }
+
+    /**
+     * Resolve `pathName` to a `(parent directory, leaf name)` pair, where
+     * the leaf is the final path component and the parent is the directory
+     * that should contain it. Throws if `pathName` has no leaf (i.e. it is
+     * the root path).
+     */
+    private async resolveLeaf(pathName: string): Promise<{ parent: KvINodeDirectory; leaf: string }> {
+        const components = this.splitPath(pathName);
+        const leaf = components.pop();
+        if (leaf === undefined) {
+            throw new KvError_FS_Exists(`Path "${pathName}" has no leaf component.`);
+        }
+
+        let parent = await this.filesystem.getRootDirectory();
+        for (const name of components) {
+            parent = await this.filesystem.getDirectory(name, parent);
+        }
+
+        return { parent, leaf };
     }
 }

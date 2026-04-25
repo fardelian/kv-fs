@@ -59,17 +59,17 @@ export class KvBlockDeviceHttpRouter {
             })
 
             // DELETE /blocks — wipe every block on the device (i.e.
-            // call `this.blockDevice.format()`). Requires the `?yes` query
-            // string as a deliberate-action gate so a stray DELETE
-            // can't nuke the device. The flag has no value — its mere
-            // presence is the confirmation.
+            // call `this.blockDevice.format()`). Requires the
+            // `?confirm=yes` query string as a deliberate-action gate so
+            // a stray DELETE can't nuke the device. The exact value has
+            // to be `yes` — anything else is rejected.
             .delete('/blocks', async (req, res) => {
-                if (req.query.yes === undefined) {
+                if (req.query.confirm !== 'yes') {
                     res.status(403).send({ data: {} });
                     return;
                 }
                 await this.blockDevice.format();
-                res.send({ data: { yes: true } });
+                res.send({ data: { confirm: 'yes' } });
             })
 
             // HEAD /blocks/:blockId — existence check. 200 = exists, 404 =

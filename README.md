@@ -106,10 +106,10 @@ The filesystem itself is built out of those same blocks:
 - **Superblock** — block 0 by convention. Holds layout constants (total blocks, block size, total inodes) and the ID of the root directory's inode.
 - **Inodes** — each file or directory lives in one inode block. The block starts with metadata (creation / modification time) and is followed by type-specific content:
     - A **file** inode stores its size and the list of data-block IDs that hold its bytes.
-    - A **directory** inode stores `(name, inode-id)` entries inline (no separate data blocks, so directory size is bounded by the block size).
+    - A **directory** inode stores `(name, inode-id)` entries inline. When entries overflow the inode block, the directory chains into additional **continuation blocks** (allocated via `allocateBlock()`); the last 4 bytes of every block hold the next-block ID, or `-1` to terminate the chain. Directory size is unbounded.
 - **Data blocks** — owned by file inodes. Allocated via `allocateBlock()` when a file grows; freed when it shrinks or is unlinked.
 
-That's the whole model. Reading a directory means reading its inode block and parsing entries. Opening a file by path means walking from the root directory through `(name, inode-id)` lookups until you reach the file's inode. Reading the file means following its data-block list and concatenating.
+That's the whole model. Reading a directory means reading its inode block and following the next-block pointer through any continuation blocks until enough entries have been collected. Opening a file by path means walking from the root directory through `(name, inode-id)` lookups until you reach the file's inode. Reading the file means following its data-block list and concatenating.
 
 `KvFilesystemEasy` is a thin convenience layer on top — it walks paths for you so callers don't have to resolve each path component by hand.
 

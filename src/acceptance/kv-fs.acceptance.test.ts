@@ -85,6 +85,87 @@ describe('kv-fs (acceptance)', () => {
         expect(await fs.readDirectory('/tmp')).not.toContain('disposable.txt');
     });
 
+    it('holds many files in a single directory (entries spill across chained blocks)', async () => {
+        const fs = await makeFs();
+        await fs.createDirectory('/big', true);
+
+        // 50 entries is well past the ~15-per-block limit of any single
+        // directory block, so the directory inode must chain into multiple
+        // continuation blocks under the hood. Callers should see one flat
+        // listing regardless.
+        const FILE_COUNT = 50;
+        for (let i = 0; i < FILE_COUNT; i++) {
+            const file = await fs.createFile(`/big/file-${String(i).padStart(3, '0')}.txt`);
+            await file.write(encoder.encode(`payload-${i}`));
+        }
+
+        const listing = await fs.readDirectory('/big');
+        expect(listing.length).toBe(FILE_COUNT);
+        for (let i = 0; i < FILE_COUNT; i++) {
+            expect(listing).toContain(`file-${String(i).padStart(3, '0')}.txt`);
+        }
+
+        // Spot-check a few payloads from the middle and end of the chain.
+        for (const i of [0, 17, 31, 49]) {
+            const data = await fs.readFile(`/big/file-${String(i).padStart(3, '0')}.txt`);
+            expect(decoder.decode(data)).toBe(`payload-${i}`);
+        }
+    });
+
+    it('survives remount (re-init from same block device) with a chained directory', async () => {
+        const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
+        await KvFilesystem.format(blockDevice, TOTAL_INODES);
+
+        // First "mount": create a directory with enough entries to require
+        // continuation blocks, then walk away.
+        {
+            const fs = new KvFilesystemEasy(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
+            await fs.createDirectory('/persist', true);
+            for (let i = 0; i < 30; i++) {
+                const file = await fs.createFile(`/persist/note-${i}.txt`);
+                await file.write(encoder.encode(`hello-${i}`));
+            }
+        }
+
+        // Second "mount": fresh KvFilesystem against the same blocks. The
+        // chained directory must be readable end-to-end — the chain pointer
+        // and total entry count round-trip through disk.
+        const fs2 = new KvFilesystemEasy(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
+        const listing = await fs2.readDirectory('/persist');
+        expect(listing.length).toBe(30);
+
+        for (let i = 0; i < 30; i++) {
+            const data = await fs2.readFile(`/persist/note-${i}.txt`);
+            expect(decoder.decode(data)).toBe(`hello-${i}`);
+        }
+    });
+
+    it('shrinks a chained directory back to a single block after enough unlinks', async () => {
+        const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
+        await KvFilesystem.format(blockDevice, TOTAL_INODES);
+        const fs = new KvFilesystemEasy(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
+
+        await fs.createDirectory('/shrink', true);
+        // Grow to 40 entries, forcing continuation blocks.
+        for (let i = 0; i < 40; i++) {
+            await fs.createFile(`/shrink/file-${i}.txt`);
+        }
+        const peakHighWaterMark = await blockDevice.getHighestBlockId();
+
+        // Unlink down to 5 — well within first-block capacity.
+        for (let i = 5; i < 40; i++) {
+            await fs.unlink(`/shrink/file-${i}.txt`);
+        }
+
+        const listing = await fs.readDirectory('/shrink');
+        expect(listing.length).toBe(5);
+
+        // Continuation blocks were freed when the directory shrank, so the
+        // device should be using fewer blocks than at peak.
+        const finalHighWaterMark = await blockDevice.getHighestBlockId();
+        expect(finalHighWaterMark).toBeLessThan(peakHighWaterMark);
+    });
+
     it('reports highestBlockId climbing as the filesystem allocates blocks', async () => {
         const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
 

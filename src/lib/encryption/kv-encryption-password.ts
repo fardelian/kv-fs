@@ -2,12 +2,21 @@ import { KvEncryptionAES256CBCKey } from './kv-encryption-aes-256-cbc-key';
 import { pbkdf2Sync } from 'crypto';
 
 export class KvEncryptionPassword extends KvEncryptionAES256CBCKey {
-    // https://xkcd.com/221/
-    protected static SALT = '9d103593-1cdc-436b-a09c-5636e15497d0';
-
+    /**
+     * @param password    The user-supplied password to derive the AES key from.
+     * @param salt        Required. Must be unique per deployment (and ideally
+     *                    per password) — sharing a salt across deployments
+     *                    means rainbow tables built once for that salt break
+     *                    every user with the same password, regardless of
+     *                    iteration count. Store this alongside the ciphertext
+     *                    or in the deployment's config; the same salt must
+     *                    be supplied to decrypt.
+     * @param iterations  PBKDF2 iteration count. Higher is slower for both
+     *                    legitimate users and attackers; 100_000+ recommended.
+     */
     constructor(
         password: string,
-        salt: string = new.target.SALT,
+        salt: string,
         iterations = 100_000,
     ) {
         super();

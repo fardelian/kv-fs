@@ -4,6 +4,13 @@ import { AsyncDatabase } from 'promised-sqlite3';
 import { Init, KvError_BD_NotFound } from '../utils';
 
 export class KvBlockDeviceSqlite3 extends KvBlockDevice {
+    /**
+     * SQLite cannot parameterize identifiers, so `tableName` is interpolated
+     * into every statement we issue. Restrict it to a safe identifier shape
+     * so a caller cannot smuggle SQL through it.
+     */
+    private static readonly TABLE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
     private readonly database: AsyncDatabase;
     private readonly tableName: string;
 
@@ -14,6 +21,17 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         tableName: string,
     ) {
         super(blockSize, capacityBytes);
+
+        if (!KvBlockDeviceSqlite3.TABLE_NAME_PATTERN.test(tableName)) {
+            throw new Error(
+                `Invalid SQLite tableName "${tableName}". `
+                + `SQLite cannot parameterize table identifiers, so the name `
+                + `is interpolated directly into SQL. To prevent injection, `
+                + `tableName must match ${KvBlockDeviceSqlite3.TABLE_NAME_PATTERN.toString()} `
+                + `(start with a letter or underscore, then letters/digits/underscores).`,
+            );
+        }
+
         this.database = database;
         this.tableName = tableName;
     }

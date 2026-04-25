@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { KvBlockDevice } from './kv-block-device.base';
-import { INodeId } from '../inode/kv-inode';
+import { INodeId } from '../inode';
 import { Init } from '../utils/init';
 import { KvError_BD_Overflow } from '../utils/errors';
 

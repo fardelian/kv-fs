@@ -1,5 +1,4 @@
 import {
-    KvBlockDeviceFs,
     KvBlockDeviceExpressRouter,
     KvEncryptedBlockDevice,
     KvBlockDeviceSqlite3,

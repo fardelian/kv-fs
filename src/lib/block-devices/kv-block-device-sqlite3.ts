@@ -1,5 +1,5 @@
 import { KvBlockDevice } from './kv-block-device.base';
-import { INodeId } from '../inode/kv-inode';
+import { INodeId } from '../inode';
 import { Database } from 'sqlite3';
 import { Init } from '../utils/init';
 import { KvError_BD_NotFound } from '../utils/errors';

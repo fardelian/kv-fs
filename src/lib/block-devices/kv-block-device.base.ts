@@ -7,9 +7,6 @@ export abstract class KvBlockDevice {
         this.blockSize = blockSize;
     }
 
-    public async init(): Promise<void> {
-    }
-
     public getBlockSize(): number {
         return this.blockSize;
     }

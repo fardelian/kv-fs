@@ -15,9 +15,6 @@ export class KvFilesystemEasy {
         this.separator = separator;
     }
 
-    public async init(): Promise<void> {
-    }
-
     // File operations
 
     @Init

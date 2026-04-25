@@ -1,4 +1,4 @@
-import { KvBlockDevice } from '../block-devices/kv-block-device.base';
+import { KvBlockDevice } from '../block-devices';
 
 export type INodeId = number;
 

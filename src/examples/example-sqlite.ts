@@ -1,5 +1,5 @@
 import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
-import { KvBlockDeviceFs, KvBlockDeviceSqlite3 } from '../lib/block-devices';
+import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { KvEncryptionNone } from '../lib/encryption';
 import { mkdirSync } from 'fs';
 import { KvEncryptedBlockDevice } from '../lib/block-devices';

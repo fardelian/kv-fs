@@ -12,11 +12,13 @@ export class KvBlockDeviceHttpRouter {
             // GET /blocks — return self-describing device metadata so the
             // client can configure its own layout (block size, capacity)
             // without having to be told up-front. The server is the source
-            // of truth.
-            .get('/blocks', (_req, res) => {
+            // of truth. `highestBlockId` is a live snapshot of allocation
+            // state and changes as blocks are written/freed.
+            .get('/blocks', async (_req, res) => {
                 const meta: KvBlockDeviceMetadata = {
                     blockSize: blockDevice.getBlockSize(),
                     maxBlockId: blockDevice.getMaxBlockId(),
+                    highestBlockId: await blockDevice.getHighestBlockId(),
                 };
                 res.send({ data: meta });
             })

@@ -95,4 +95,16 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
 
         return resBody.data.nextBlockId;
     }
+
+    /**
+     * Read the highest currently-allocated block ID from the server's
+     * metadata. Live — re-fetches each call so callers see fresh state;
+     * never cached. Returns `-1` if the server reports no blocks.
+     */
+    @Init
+    public async getHighestBlockId(): Promise<INodeId> {
+        const res = await this.request(`${this.baseUrl}/blocks`);
+        const body = await res.json() as { data: KvBlockDeviceMetadata };
+        return body.data.highestBlockId;
+    }
 }

@@ -103,4 +103,41 @@ describe('KvBlockDeviceMemory', () => {
             expect(await device.allocateBlock()).toBe(1);
         });
     });
+
+    describe('getHighestBlockId', () => {
+        it('returns -1 when no blocks exist', async () => {
+            expect(await device.getHighestBlockId()).toBe(-1);
+        });
+
+        it('returns the only block ID when one block exists', async () => {
+            const blockId = faker.number.int({ min: 0, max: 100 });
+            await device.writeBlock(blockId, new Uint8Array([1]));
+
+            expect(await device.getHighestBlockId()).toBe(blockId);
+        });
+
+        it('returns the largest ID across a sparse allocation', async () => {
+            await device.writeBlock(0, new Uint8Array([1]));
+            await device.writeBlock(7, new Uint8Array([1]));
+            await device.writeBlock(3, new Uint8Array([1]));
+
+            expect(await device.getHighestBlockId()).toBe(7);
+        });
+
+        it('drops back to the next-highest after the top block is freed', async () => {
+            await device.writeBlock(2, new Uint8Array([1]));
+            await device.writeBlock(5, new Uint8Array([1]));
+
+            await device.freeBlock(5);
+
+            expect(await device.getHighestBlockId()).toBe(2);
+        });
+
+        it('returns -1 after every block is freed', async () => {
+            await device.writeBlock(4, new Uint8Array([1]));
+            await device.freeBlock(4);
+
+            expect(await device.getHighestBlockId()).toBe(-1);
+        });
+    });
 });

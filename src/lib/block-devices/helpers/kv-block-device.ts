@@ -10,8 +10,28 @@ import { INodeId } from '../../inode';
  * know about (e.g. supported features, on-disk version, etc.).
  */
 export interface KvBlockDeviceMetadata {
+    /**
+     * Size in bytes of one block at the moment this metadata was produced.
+     * Dynamic — a device may reconfigure itself at runtime (e.g. growing
+     * to a larger block size after a reformat). Treat each fetch as a
+     * snapshot.
+     */
     blockSize: number;
+
+    /**
+     * Capacity ceiling: how many blocks the device could hold at the
+     * moment this metadata was produced. Dynamic — a device may be
+     * resized at runtime (e.g. attaching more backing storage). Treat
+     * each fetch as a snapshot.
+     */
     maxBlockId: number;
+
+    /**
+     * The largest block ID currently allocated on the device, or `-1`
+     * when no blocks exist. Dynamic — changes as blocks are written and
+     * freed. Treat each fetch as a snapshot.
+     */
+    highestBlockId: number;
 }
 
 export abstract class KvBlockDevice {
@@ -40,4 +60,11 @@ export abstract class KvBlockDevice {
     public abstract existsBlock(blockId: INodeId): Promise<boolean>;
 
     public abstract allocateBlock(): Promise<INodeId>;
+
+    /**
+     * Return the largest block ID currently allocated on the device, or
+     * `-1` when the device has no blocks. Dynamic — must be recomputed
+     * each call; never cache the result.
+     */
+    public abstract getHighestBlockId(): Promise<INodeId>;
 }

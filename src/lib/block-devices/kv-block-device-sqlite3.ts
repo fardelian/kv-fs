@@ -19,7 +19,7 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
     ) {
         super(blockSize, capacityBytes);
         this.database = database;
-        // The field-level DbRun/DbGet annotations pin promisify's overloaded
+        // The field-level DbRun/DbGet annotations pin promisified overloaded
         // result down to the single signature we actually use (sql + params).
         this.dbRun = promisify(this.database.run.bind(this.database));
         this.dbGet = promisify(this.database.get.bind(this.database));
@@ -71,5 +71,15 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
             'SELECT MAX(id) AS maxId FROM blocks',
         );
         return (row?.maxId ?? -1) + 1;
+    }
+
+    @Init
+    public async getHighestBlockId(): Promise<INodeId> {
+        // SQLite's MAX(id) returns null on an empty table; fold to -1 so
+        // the wire-level contract is "always a number".
+        const row = await this.dbGet<{ maxId: number | null }>(
+            'SELECT MAX(id) AS maxId FROM blocks',
+        );
+        return row?.maxId ?? -1;
     }
 }

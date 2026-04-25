@@ -14,6 +14,11 @@ const SUPER_BLOCK_ID = 0;
 async function run() {
     // Pure transport — fetches blockSize/maxBlockId from the server.
     const httpClient = new KvBlockDeviceHttpClient(`http://localhost:${PORT}`);
+
+    // Peek at what the server advertises before init() does the same fetch.
+    const metaResponse = await fetch(`http://localhost:${PORT}/blocks`);
+    console.log('GET /blocks:', await metaResponse.json());
+
     await httpClient.init();
 
     // Wrap with encryption. The exposed block size shrinks by the cipher's
@@ -59,15 +64,3 @@ async function run() {
 }
 
 run().catch(console.error);
-
-/*
-
-    Expected output:
-
-    testRead1: hello world
-    testRead2: and hello again
-    testDir: Map(2) { 'test1.txt' => 4, 'test2.txt' => 6 }
-    homeDir: Map(1) { 'florin' => 3 }
-    rootDir: Map(1) { 'home' => 2 }
-
-*/

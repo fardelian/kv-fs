@@ -39,4 +39,11 @@ export class KvBlockDeviceMemory extends KvBlockDevice {
         }
         return blockId;
     }
+
+    public async getHighestBlockId(): Promise<INodeId> {
+        if (this.blocks.size === 0) {
+            return -1;
+        }
+        return Math.max(...this.blocks.keys());
+    }
 }

@@ -113,6 +113,28 @@ describe('kv-fs (acceptance)', () => {
         expect(await fs.readDirectory('/tmp')).not.toContain('disposable.txt');
     });
 
+    it('reports highestBlockId climbing as the filesystem allocates blocks', async () => {
+        const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
+
+        // Fresh device: nothing allocated yet.
+        expect(await blockDevice.getHighestBlockId()).toBe(-1);
+
+        // After format(), at least the superblock + the inode-bitmap blocks
+        // have been written, so the highest allocated ID is no longer -1.
+        await KvFilesystem.format(blockDevice, TOTAL_BLOCKS, TOTAL_INODES);
+        const highestAfterFormat = await blockDevice.getHighestBlockId();
+        expect(highestAfterFormat).toBeGreaterThanOrEqual(0);
+
+        // Creating real content should push the high-water mark up further.
+        const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
+        const fs = new KvFilesystemEasy(filesystem, '/');
+        await fs.createDirectory('/data', true);
+        const file = await fs.createFile('/data/note.txt');
+        await file.write(encoder.encode(faker.lorem.paragraph()));
+
+        expect(await blockDevice.getHighestBlockId()).toBeGreaterThan(highestAfterFormat);
+    });
+
     describe('with KvEncryptionRot13 layered between the filesystem and the device', () => {
         it('round-trips files transparently through the encryption layer', async () => {
             const { fs } = await makeRot13Fs();

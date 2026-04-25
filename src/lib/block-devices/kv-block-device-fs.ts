@@ -56,4 +56,11 @@ export class KvBlockDeviceFs extends KvBlockDevice {
         }
         return blockId;
     }
+
+    public async getHighestBlockId(): Promise<INodeId> {
+        return fs.readdirSync(this.localFsBasePath)
+            .filter((fileName) => /^(\d+)\.txt$/.exec(fileName))
+            .map((fileName) => Number(fileName.split('.')[0]))
+            .reduce((prev, curr) => Math.max(prev, curr), -1);
+    }
 }

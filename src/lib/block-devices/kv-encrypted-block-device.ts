@@ -63,4 +63,8 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
     public async allocateBlock(): Promise<INodeId> {
         return await this.blockDevice.allocateBlock();
     }
+
+    public async getHighestBlockId(): Promise<INodeId> {
+        return await this.blockDevice.getHighestBlockId();
+    }
 }

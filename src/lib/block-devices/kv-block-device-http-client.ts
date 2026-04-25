@@ -8,6 +8,10 @@ import { Init, KvError_BD_Overflow } from '../utils';
  * is performed here. If you want encryption on the wire, wrap the
  * client with `KvEncryptedBlockDevice`.
  *
+ * Block bodies cross the wire as raw bytes
+ * (`Content-Type: application/octet-stream`). Metadata responses (block
+ * size / capacity / allocation IDs / errors) are JSON.
+ *
  * The block size and capacity are read from the server on `init()`, so
  * the server's block device is the source of truth for layout. Wrap
  * after `init()` resolves; otherwise `getBlockSize()` returns 0 and any
@@ -42,17 +46,16 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         return res;
     }
 
-    /** Read using GET /blocks/:blockId */
+    /** Read using GET /blocks/:blockId. Returns raw bytes verbatim. */
     @Init
     public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         const blockUrl = this.getBlockUrl(blockId);
         const res = await this.request(blockUrl);
-        const resBody = await res.json() as { data: { blockData: number[] } };
-
-        return Uint8Array.from(resBody.data.blockData);
+        const buffer = await res.arrayBuffer();
+        return new Uint8Array(buffer);
     }
 
-    /** Write using PUT /blocks/:blockId */
+    /** Write using PUT /blocks/:blockId. Body is raw bytes, padded to blockSize. */
     @Init
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
         if (data.length > this.getBlockSize()) {
@@ -65,8 +68,9 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         const blockUrl = this.getBlockUrl(blockId);
         await this.request(blockUrl, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data: { blockData: Array.from(blockData) } }),
+            headers: { 'Content-Type': 'application/octet-stream' },
+            // `body` accepts BodyInit; Uint8Array is one of its valid forms.
+            body: blockData,
         });
     }
 
@@ -110,10 +114,10 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
 
     /**
      * Wipe every block on the remote device. Maps to DELETE /blocks on
-     * the server, with the `?yes` deliberate-action gate the server
-     * requires. Use with care — this is a destructive operation.
+     * the server, with the `?confirm=yes` deliberate-action gate the
+     * server requires. Use with care — this is a destructive operation.
      */
     public async format(): Promise<void> {
-        await this.request(`${this.baseUrl}/blocks?yes`, { method: 'DELETE' });
+        await this.request(`${this.baseUrl}/blocks?confirm=yes`, { method: 'DELETE' });
     }
 }

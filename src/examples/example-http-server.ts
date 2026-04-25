@@ -38,9 +38,19 @@ async function run() {
     const bdRouter = new KvBlockDeviceHttpRouter(encryptedServerBlockDevice);
     bdRouter.mount(router);
 
-    // Start express app
-
+    // Start express app. Block bodies arrive as raw bytes — `express.raw()`
+    // captures them as a Buffer on `req.body`. JSON parsing stays for any
+    // future endpoints that exchange structured data; for now no endpoint
+    // expects a JSON body, but installing both middlewares keeps this
+    // forward-compatible.
     const server = express();
+    server.use(express.raw({
+        type: 'application/octet-stream',
+        // One block plus comfortable headroom for the AEAD overhead so
+        // wrapped writes still fit. Bump if you swap to a much larger
+        // block size or a heavier overhead cipher.
+        limit: BLOCK_SIZE * 2,
+    }));
     server.use(express.json());
     server.use(router);
 

@@ -6,16 +6,31 @@ const BASE_URL = 'http://kv-fs.test';
 const SERVER_BLOCK_SIZE = 4096;
 const SERVER_CAPACITY_BYTES = SERVER_BLOCK_SIZE * 32;
 
-interface FakeResponseInit {
+interface FakeJsonResponseInit {
     status?: number;
-    body?: unknown;
+    body: unknown;
 }
 
-function fakeResponse({ status = 200, body }: FakeResponseInit): Response {
+interface FakeBytesResponseInit {
+    status?: number;
+    bytes: Uint8Array;
+}
+
+function jsonResponse({ status = 200, body }: FakeJsonResponseInit): Response {
     return {
         ok: status >= 200 && status < 300,
         status,
         json: async () => body,
+        arrayBuffer: async () => { throw new Error('fakeJson Response has no body'); },
+    } as unknown as Response;
+}
+
+function bytesResponse({ status = 200, bytes }: FakeBytesResponseInit): Response {
+    return {
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => { throw new Error('fakeBytes Response is not JSON'); },
+        arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
     } as unknown as Response;
 }
 
@@ -33,7 +48,7 @@ afterEach(() => {
 
 /** Make a `metadata` response that init() reads on first contact. */
 function metadataResponse(highestBlockId = -1): Response {
-    return fakeResponse({
+    return jsonResponse({
         body: {
             data: {
                 blockSize: SERVER_BLOCK_SIZE,
@@ -58,7 +73,7 @@ describe('KvBlockDeviceHttpClient', () => {
         });
 
         it('throws when the server returns a non-2xx status', async () => {
-            mockFetch.mockResolvedValueOnce(fakeResponse({ status: 500 }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ status: 500, body: {} }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
 
@@ -74,9 +89,9 @@ describe('KvBlockDeviceHttpClient', () => {
     });
 
     describe('readBlock', () => {
-        it('GETs /blocks/:blockId and decodes the JSON byte array', async () => {
+        it('GETs /blocks/:blockId and decodes the raw byte response', async () => {
             mockFetch.mockResolvedValueOnce(metadataResponse());
-            mockFetch.mockResolvedValueOnce(fakeResponse({ body: { data: { blockData: [0xab, 0xcd, 0xef] } } }));
+            mockFetch.mockResolvedValueOnce(bytesResponse({ bytes: new Uint8Array([0xab, 0xcd, 0xef]) }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             const result = await client.readBlock(7);
@@ -87,7 +102,7 @@ describe('KvBlockDeviceHttpClient', () => {
 
         it('propagates errors when the server responds non-2xx', async () => {
             mockFetch.mockResolvedValueOnce(metadataResponse());
-            mockFetch.mockResolvedValueOnce(fakeResponse({ status: 404 }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ status: 404, body: {} }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
 
@@ -96,9 +111,9 @@ describe('KvBlockDeviceHttpClient', () => {
     });
 
     describe('writeBlock', () => {
-        it('PUTs /blocks/:blockId with a JSON body, padding to blockSize', async () => {
+        it('PUTs /blocks/:blockId with raw bytes in the body, padded to blockSize', async () => {
             mockFetch.mockResolvedValueOnce(metadataResponse());
-            mockFetch.mockResolvedValueOnce(fakeResponse({ body: { data: null } }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ status: 204, body: null }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             await client.writeBlock(2, new Uint8Array([1, 2, 3]));
@@ -107,21 +122,19 @@ describe('KvBlockDeviceHttpClient', () => {
             expect(url).toBe(`${BASE_URL}/blocks/2`);
             const reqInit = init!;
             expect(reqInit.method).toBe('PUT');
-            expect(reqInit.headers).toEqual({ 'Content-Type': 'application/json' });
+            expect(reqInit.headers).toEqual({ 'Content-Type': 'application/octet-stream' });
 
-            const body = JSON.parse(reqInit.body as string) as { data: { blockData: number[] } };
-            expect(body.data.blockData.length).toBe(SERVER_BLOCK_SIZE);
-            expect(body.data.blockData.slice(0, 3)).toEqual([1, 2, 3]);
+            const body = reqInit.body;
+            expect(body).toBeInstanceOf(Uint8Array);
+            const bytes = body as Uint8Array;
+            expect(bytes.length).toBe(SERVER_BLOCK_SIZE);
+            expect(Array.from(bytes.subarray(0, 3))).toEqual([1, 2, 3]);
             for (let i = 3; i < SERVER_BLOCK_SIZE; i++) {
-                expect(body.data.blockData[i]).toBe(0);
+                expect(bytes[i]).toBe(0);
             }
         });
 
         it('throws KvError_BD_Overflow when data exceeds blockSize', async () => {
-            // The @Init wrapper triggers init() lazily on the first
-            // decorated call — set up exactly one metadata response, then
-            // call writeBlock directly. The size check fires before any
-            // network I/O, so no PUT should be issued.
             mockFetch.mockResolvedValueOnce(metadataResponse());
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
@@ -129,7 +142,6 @@ describe('KvBlockDeviceHttpClient', () => {
 
             await expect(client.writeBlock(0, oversize))
                 .rejects.toBeInstanceOf(KvError_BD_Overflow);
-            // Only the metadata fetch happened; no PUT issued.
             expect(mockFetch).toHaveBeenCalledTimes(1);
         });
     });
@@ -137,7 +149,7 @@ describe('KvBlockDeviceHttpClient', () => {
     describe('freeBlock', () => {
         it('issues DELETE /blocks/:blockId', async () => {
             mockFetch.mockResolvedValueOnce(metadataResponse());
-            mockFetch.mockResolvedValueOnce(fakeResponse({ body: { data: null } }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ status: 204, body: null }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             await client.freeBlock(9);
@@ -151,7 +163,7 @@ describe('KvBlockDeviceHttpClient', () => {
     describe('existsBlock', () => {
         it('returns true when HEAD /blocks/:blockId returns 200', async () => {
             mockFetch.mockResolvedValueOnce(metadataResponse());
-            mockFetch.mockResolvedValueOnce(fakeResponse({ status: 200 }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ status: 200, body: {} }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             expect(await client.existsBlock(0)).toBe(true);
@@ -159,7 +171,7 @@ describe('KvBlockDeviceHttpClient', () => {
 
         it('returns false when HEAD /blocks/:blockId returns 404', async () => {
             mockFetch.mockResolvedValueOnce(metadataResponse());
-            mockFetch.mockResolvedValueOnce(fakeResponse({ status: 404 }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ status: 404, body: {} }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             expect(await client.existsBlock(0)).toBe(false);
@@ -169,7 +181,7 @@ describe('KvBlockDeviceHttpClient', () => {
     describe('allocateBlock', () => {
         it('POSTs /blocks and returns the server-assigned id', async () => {
             mockFetch.mockResolvedValueOnce(metadataResponse());
-            mockFetch.mockResolvedValueOnce(fakeResponse({ body: { data: { blockId: 17 } } }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ body: { data: { blockId: 17 } } }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             const id = await client.allocateBlock();
@@ -189,28 +201,25 @@ describe('KvBlockDeviceHttpClient', () => {
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             const result = await client.getHighestBlockId();
 
-            // Two metadata fetches: one for init, one for the live read.
             expect(mockFetch).toHaveBeenCalledTimes(2);
             expect(result).toBe(42);
         });
     });
 
     describe('format', () => {
-        it('issues DELETE /blocks?yes (does not require init)', async () => {
-            // format() does NOT have @Init — it can run without first
-            // calling init(). Single fetch call expected.
-            mockFetch.mockResolvedValueOnce(fakeResponse({ body: { data: { yes: true } } }));
+        it('issues DELETE /blocks?confirm=yes (does not require init)', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ body: { data: { confirm: 'yes' } } }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             await client.format();
 
             const [url, init] = mockFetch.mock.calls[0];
-            expect(url).toBe(`${BASE_URL}/blocks?yes`);
+            expect(url).toBe(`${BASE_URL}/blocks?confirm=yes`);
             expect(init!.method).toBe('DELETE');
         });
 
         it('throws when the server responds non-2xx', async () => {
-            mockFetch.mockResolvedValueOnce(fakeResponse({ status: 403 }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ status: 403, body: {} }));
 
             const client = new KvBlockDeviceHttpClient(BASE_URL);
             await expect(client.format()).rejects.toThrow(/status 403/);

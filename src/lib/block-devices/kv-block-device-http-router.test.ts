@@ -22,14 +22,26 @@ class FakeRes {
     public statusCode = 200;
     public body: unknown = undefined;
     public ended = false;
+    public contentType: string | undefined;
 
     public status = (code: number): this => {
         this.statusCode = code;
         return this;
     };
 
+    public json = (body: unknown): this => {
+        this.body = body;
+        this.contentType = 'application/json';
+        return this;
+    };
+
     public send = (body: unknown): this => {
         this.body = body;
+        return this;
+    };
+
+    public type = (mime: string): this => {
+        this.contentType = mime;
         return this;
     };
 
@@ -96,7 +108,7 @@ describe('KvBlockDeviceHttpRouter', () => {
         });
     });
 
-    describe('POST /blocks (allocate, optionally write)', () => {
+    describe('POST /blocks (allocate, optionally write raw bytes)', () => {
         it('returns the allocated blockId and does not write when no body is provided', async () => {
             const { blockDevice, fakeRouter } = makeRouter();
             blockDevice.allocateBlock.mockResolvedValueOnce(3);
@@ -107,14 +119,13 @@ describe('KvBlockDeviceHttpRouter', () => {
             expect(blockDevice.writeBlock).not.toHaveBeenCalled();
         });
 
-        it('writes the body data to the newly allocated block when blockData is provided', async () => {
+        it('writes the raw body bytes to the newly allocated block when body is non-empty', async () => {
             const { blockDevice, fakeRouter } = makeRouter();
             blockDevice.allocateBlock.mockResolvedValueOnce(11);
             blockDevice.writeBlock.mockResolvedValueOnce(undefined);
 
-            const res = await invoke(fakeRouter, 'POST', '/blocks', {
-                body: { data: { blockData: [1, 2, 3, 4] } },
-            });
+            const bodyBytes = Buffer.from([1, 2, 3, 4]);
+            const res = await invoke(fakeRouter, 'POST', '/blocks', { body: bodyBytes });
 
             expect(res.body).toEqual({ data: { blockId: 11 } });
             expect(blockDevice.writeBlock).toHaveBeenCalledTimes(1);
@@ -123,14 +134,21 @@ describe('KvBlockDeviceHttpRouter', () => {
             expect(Array.from(writtenData)).toEqual([1, 2, 3, 4]);
         });
 
-        it('does not write when the body has no data field', async () => {
+        it('does not write when body is an empty Buffer', async () => {
             const { blockDevice, fakeRouter } = makeRouter();
             blockDevice.allocateBlock.mockResolvedValueOnce(0);
 
-            await invoke(fakeRouter, 'POST', '/blocks', { body: {} });
-            expect(blockDevice.writeBlock).not.toHaveBeenCalled();
+            await invoke(fakeRouter, 'POST', '/blocks', { body: Buffer.alloc(0) });
 
-            await invoke(fakeRouter, 'POST', '/blocks', { body: { data: {} } });
+            expect(blockDevice.writeBlock).not.toHaveBeenCalled();
+        });
+
+        it('does not write when there is no body at all', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+            blockDevice.allocateBlock.mockResolvedValueOnce(0);
+
+            await invoke(fakeRouter, 'POST', '/blocks', {});
+
             expect(blockDevice.writeBlock).not.toHaveBeenCalled();
         });
     });
@@ -199,8 +217,8 @@ describe('KvBlockDeviceHttpRouter', () => {
         );
     });
 
-    describe('GET /blocks/:blockId (read)', () => {
-        it('returns the block bytes as a JSON number array', async () => {
+    describe('GET /blocks/:blockId (raw read)', () => {
+        it('returns the block bytes as application/octet-stream', async () => {
             const { blockDevice, fakeRouter } = makeRouter();
             const expected = new Uint8Array([10, 20, 30]);
             blockDevice.readBlock.mockResolvedValueOnce(expected);
@@ -208,7 +226,9 @@ describe('KvBlockDeviceHttpRouter', () => {
             const res = await invoke(fakeRouter, 'GET', '/blocks/:blockId', { params: { blockId: '5' } });
 
             expect(blockDevice.readBlock).toHaveBeenCalledWith(5);
-            expect(res.body).toEqual({ data: { blockData: [10, 20, 30] } });
+            expect(res.contentType).toBe('application/octet-stream');
+            expect(Buffer.isBuffer(res.body)).toBe(true);
+            expect(Array.from(res.body as Buffer)).toEqual([10, 20, 30]);
         });
 
         it('returns 400 with an error message for an invalid blockId', async () => {
@@ -222,21 +242,33 @@ describe('KvBlockDeviceHttpRouter', () => {
         });
     });
 
-    describe('PUT /blocks/:blockId (write)', () => {
-        it('writes the body data to the requested block', async () => {
+    describe('PUT /blocks/:blockId (raw write)', () => {
+        it('writes the raw body bytes to the requested block and returns 204', async () => {
             const { blockDevice, fakeRouter } = makeRouter();
             blockDevice.writeBlock.mockResolvedValueOnce(undefined);
 
             const res = await invoke(fakeRouter, 'PUT', '/blocks/:blockId', {
                 params: { blockId: '4' },
-                body: { data: { blockData: [9, 8, 7] } },
+                body: Buffer.from([9, 8, 7]),
             });
 
             expect(blockDevice.writeBlock).toHaveBeenCalledTimes(1);
             const [writtenId, writtenData] = blockDevice.writeBlock.mock.calls[0];
             expect(writtenId).toBe(4);
             expect(Array.from(writtenData)).toEqual([9, 8, 7]);
-            expect(res.body).toEqual({ data: null });
+            expect(res.statusCode).toBe(204);
+        });
+
+        it('returns 400 when the body is missing or not a Buffer', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'PUT', '/blocks/:blockId', {
+                params: { blockId: '4' },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'Expected application/octet-stream body.' });
+            expect(blockDevice.writeBlock).not.toHaveBeenCalled();
         });
 
         it('returns 400 with an error message for an invalid blockId', async () => {
@@ -244,7 +276,7 @@ describe('KvBlockDeviceHttpRouter', () => {
 
             const res = await invoke(fakeRouter, 'PUT', '/blocks/:blockId', {
                 params: { blockId: 'bad' },
-                body: { data: { blockData: [] } },
+                body: Buffer.from([]),
             });
 
             expect(res.statusCode).toBe(400);
@@ -254,7 +286,7 @@ describe('KvBlockDeviceHttpRouter', () => {
     });
 
     describe('DELETE /blocks/:blockId (free)', () => {
-        it('frees the block at the given id', async () => {
+        it('frees the block at the given id and returns 204', async () => {
             const { blockDevice, fakeRouter } = makeRouter();
             blockDevice.freeBlock.mockResolvedValueOnce(undefined);
             const blockId = faker.number.int({ min: 0, max: 15 });
@@ -264,7 +296,7 @@ describe('KvBlockDeviceHttpRouter', () => {
             });
 
             expect(blockDevice.freeBlock).toHaveBeenCalledWith(blockId);
-            expect(res.body).toEqual({ data: null });
+            expect(res.statusCode).toBe(204);
         });
 
         it('returns 400 with an error message for an invalid blockId', async () => {

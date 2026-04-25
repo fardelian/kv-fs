@@ -25,7 +25,7 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         this.dbGet = promisify(this.database.get.bind(this.database));
     }
 
-    protected async init(): Promise<void> {
+    async init(): Promise<void> {
         await this.dbRun('CREATE TABLE IF NOT EXISTS blocks (id INTEGER PRIMARY KEY, data BLOB)');
     }
 

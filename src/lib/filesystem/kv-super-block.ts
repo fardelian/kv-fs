@@ -16,7 +16,7 @@ export class SuperBlock {
         this.superBlockId = superBlockId;
     }
 
-    public async init(): Promise<void> {
+    async init(): Promise<void> {
         const buffer = await this.blockDevice.readBlock(this.superBlockId);
         const view = dataView(buffer);
 

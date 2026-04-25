@@ -23,7 +23,7 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
     }
 
     /** Fetch the server's metadata and configure this device to match. */
-    public async init(): Promise<void> {
+    async init(): Promise<void> {
         const res = await this.request(`${this.baseUrl}/blocks`);
         const body = await res.json() as { data: KvBlockDeviceMetadata };
         this.blockSize = body.data.blockSize;

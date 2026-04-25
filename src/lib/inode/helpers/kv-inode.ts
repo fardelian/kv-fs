@@ -15,7 +15,7 @@ export abstract class INode<DataType> {
         this.id = id;
     }
 
-    protected async init(): Promise<void> {
+    async init(): Promise<void> {
         const buffer = await this.blockDevice.readBlock(this.id);
         const view = dataView(buffer);
 

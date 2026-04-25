@@ -44,7 +44,7 @@ export abstract class KvEncryptionCipher extends KvEncryption {
         this.key = new Uint8Array(key);
     }
 
-    protected async init() {
+    async init() {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (!this.key) {
             throw new KvError_Enc_Key(`Encryption key must be ${this.keyLengthBytes * 8} bits (${this.keyLengthBytes} bytes). Received none.`);

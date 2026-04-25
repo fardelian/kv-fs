@@ -11,7 +11,7 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
 
     private entries: DirectoryEntriesList = new Map();
 
-    protected async init(): Promise<void> {
+    async init(): Promise<void> {
         await super.init();
 
         const buffer = await this.blockDevice.readBlock(this.id);

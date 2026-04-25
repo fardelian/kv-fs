@@ -8,7 +8,7 @@ export class KvINodeFile extends INode<Uint8Array> {
     private dataBlockIds: INodeId[] = [];
     private position = 0;
 
-    protected async init(): Promise<void> {
+    async init(): Promise<void> {
         await super.init();
 
         const buffer = await this.blockDevice.readBlock(this.id);

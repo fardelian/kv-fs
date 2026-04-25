@@ -5,46 +5,44 @@ import { KvEncryptionRot13 } from './kv-encryption-rot13';
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-// ROT13 is location-independent, so a fixed block ID is fine for these tests;
-// it satisfies the unified KvEncryption API.
-const BLOCK_ID = 0;
-
 describe('KvEncryptionRot13', () => {
     let rot: KvEncryptionRot13;
+    let blockId: number;
 
     beforeEach(() => {
         rot = new KvEncryptionRot13();
+        blockId = faker.number.int(100);
     });
 
     describe('encrypt', () => {
         it('shifts uppercase A-M to N-Z', async () => {
-            const result = await rot.encrypt(BLOCK_ID, enc.encode('ABCDEFGHIJKLM'));
+            const result = await rot.encrypt(blockId, enc.encode('ABCDEFGHIJKLM'));
             expect(dec.decode(result)).toBe('NOPQRSTUVWXYZ');
         });
 
         it('shifts uppercase N-Z back to A-M (wrap-around)', async () => {
-            const result = await rot.encrypt(BLOCK_ID, enc.encode('NOPQRSTUVWXYZ'));
+            const result = await rot.encrypt(blockId, enc.encode('NOPQRSTUVWXYZ'));
             expect(dec.decode(result)).toBe('ABCDEFGHIJKLM');
         });
 
         it('shifts lowercase a-m to n-z', async () => {
-            const result = await rot.encrypt(BLOCK_ID, enc.encode('abcdefghijklm'));
+            const result = await rot.encrypt(blockId, enc.encode('abcdefghijklm'));
             expect(dec.decode(result)).toBe('nopqrstuvwxyz');
         });
 
         it('shifts lowercase n-z back to a-m (wrap-around)', async () => {
-            const result = await rot.encrypt(BLOCK_ID, enc.encode('nopqrstuvwxyz'));
+            const result = await rot.encrypt(blockId, enc.encode('nopqrstuvwxyz'));
             expect(dec.decode(result)).toBe('abcdefghijklm');
         });
 
         it('preserves case (uppercase stays uppercase, lowercase stays lowercase)', async () => {
-            const result = await rot.encrypt(BLOCK_ID, enc.encode('Hello, World!'));
+            const result = await rot.encrypt(blockId, enc.encode('Hello, World!'));
             expect(dec.decode(result)).toBe('Uryyb, Jbeyq!');
         });
 
         it('passes through non-letter ASCII bytes (digits, punctuation, whitespace)', async () => {
             const input = enc.encode('0123 !@#$%^&*()_+-=[]{}|;:",.<>/?\t\n');
-            const result = await rot.encrypt(BLOCK_ID, input);
+            const result = await rot.encrypt(blockId, input);
             expect(Array.from(result)).toEqual(Array.from(input));
         });
 
@@ -54,7 +52,7 @@ describe('KvEncryptionRot13', () => {
             const input = new Uint8Array(256);
             for (let i = 0; i < 256; i++) input[i] = i;
 
-            const result = await rot.encrypt(BLOCK_ID, input);
+            const result = await rot.encrypt(blockId, input);
 
             for (let i = 0; i < 256; i++) {
                 const isUpper = i >= 0x41 && i <= 0x5a;
@@ -71,13 +69,13 @@ describe('KvEncryptionRot13', () => {
             const input = new Uint8Array(faker.number.int({ min: 0, max: 10_000 }));
             for (let i = 0; i < input.length; i++) input[i] = i & 0xff;
 
-            const result = await rot.encrypt(BLOCK_ID, input);
+            const result = await rot.encrypt(blockId, input);
 
             expect(result.length).toBe(input.length);
         });
 
         it('returns an empty buffer for empty input', async () => {
-            const result = await rot.encrypt(BLOCK_ID, new Uint8Array(0));
+            const result = await rot.encrypt(blockId, new Uint8Array(0));
 
             expect(result).toBeInstanceOf(Uint8Array);
             expect(result.length).toBe(0);
@@ -87,7 +85,7 @@ describe('KvEncryptionRot13', () => {
             const input = enc.encode('hello');
             const inputSnapshot = Array.from(input);
 
-            const result = await rot.encrypt(BLOCK_ID, input);
+            const result = await rot.encrypt(blockId, input);
 
             expect(result).not.toBe(input);
             expect(Array.from(input)).toEqual(inputSnapshot);
@@ -97,9 +95,9 @@ describe('KvEncryptionRot13', () => {
     describe('decrypt', () => {
         it('reverses encrypt for letters', async () => {
             const original = enc.encode('Hello, World!');
-            const encrypted = await rot.encrypt(BLOCK_ID, original);
+            const encrypted = await rot.encrypt(blockId, original);
 
-            const decrypted = await rot.decrypt(BLOCK_ID, encrypted);
+            const decrypted = await rot.decrypt(blockId, encrypted);
 
             expect(dec.decode(decrypted)).toBe('Hello, World!');
         });
@@ -107,8 +105,8 @@ describe('KvEncryptionRot13', () => {
         it('produces the same output as encrypt (ROT13 is self-inverse)', async () => {
             const input = enc.encode(faker.lorem.paragraph());
 
-            const encrypted = await rot.encrypt(BLOCK_ID, input);
-            const decrypted = await rot.decrypt(BLOCK_ID, input);
+            const encrypted = await rot.encrypt(blockId, input);
+            const decrypted = await rot.decrypt(blockId, input);
 
             expect(Array.from(encrypted)).toEqual(Array.from(decrypted));
         });
@@ -126,8 +124,8 @@ describe('KvEncryptionRot13', () => {
         ])('encrypt -> decrypt restores %j', async (text) => {
             const original = enc.encode(text);
 
-            const encrypted = await rot.encrypt(BLOCK_ID, original);
-            const decrypted = await rot.decrypt(BLOCK_ID, encrypted);
+            const encrypted = await rot.encrypt(blockId, original);
+            const decrypted = await rot.decrypt(blockId, encrypted);
 
             expect(dec.decode(decrypted)).toBe(text);
         });
@@ -135,8 +133,8 @@ describe('KvEncryptionRot13', () => {
         it('encrypt twice returns the original (self-inverse identity)', async () => {
             const original = enc.encode('Lorem ipsum dolor sit amet.');
 
-            const once = await rot.encrypt(BLOCK_ID, original);
-            const twice = await rot.encrypt(BLOCK_ID, once);
+            const once = await rot.encrypt(blockId, original);
+            const twice = await rot.encrypt(blockId, once);
 
             expect(Array.from(twice)).toEqual(Array.from(original));
         });
@@ -145,8 +143,8 @@ describe('KvEncryptionRot13', () => {
             const input = new Uint8Array(256);
             for (let i = 0; i < 256; i++) input[i] = i;
 
-            const encrypted = await rot.encrypt(BLOCK_ID, input);
-            const decrypted = await rot.decrypt(BLOCK_ID, encrypted);
+            const encrypted = await rot.encrypt(blockId, input);
+            const decrypted = await rot.decrypt(blockId, encrypted);
 
             expect(Array.from(decrypted)).toEqual(Array.from(input));
         });
@@ -157,8 +155,8 @@ describe('KvEncryptionRot13', () => {
                 input[i] = faker.number.int({ min: 0, max: 255 });
             }
 
-            const encrypted = await rot.encrypt(BLOCK_ID, input);
-            const decrypted = await rot.decrypt(BLOCK_ID, encrypted);
+            const encrypted = await rot.encrypt(blockId, input);
+            const decrypted = await rot.decrypt(blockId, encrypted);
 
             expect(Array.from(decrypted)).toEqual(Array.from(input));
         });
@@ -172,8 +170,8 @@ describe('KvEncryptionRot13', () => {
                 const expectedUpper = String.fromCharCode(0x41 + ((i + 13) % 26));
                 const expectedLower = String.fromCharCode(0x61 + ((i + 13) % 26));
 
-                const upperResult = await rot.encrypt(BLOCK_ID, enc.encode(upperPlain));
-                const lowerResult = await rot.encrypt(BLOCK_ID, enc.encode(lowerPlain));
+                const upperResult = await rot.encrypt(blockId, enc.encode(upperPlain));
+                const lowerResult = await rot.encrypt(blockId, enc.encode(lowerPlain));
 
                 expect(dec.decode(upperResult)).toBe(expectedUpper);
                 expect(dec.decode(lowerResult)).toBe(expectedLower);

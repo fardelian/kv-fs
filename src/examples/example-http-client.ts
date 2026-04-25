@@ -16,8 +16,8 @@ async function run() {
     const httpClient = new KvBlockDeviceHttpClient(`http://localhost:${PORT}`);
 
     // Peek at what the server advertises before init() does the same fetch.
-    const metaResponse = await fetch(`http://localhost:${PORT}/blocks`);
-    console.log('GET /blocks:', await metaResponse.json());
+    const metaBefore = await fetch(`http://localhost:${PORT}/blocks`);
+    console.log('GET /blocks:', await metaBefore.json());
 
     await httpClient.init();
 
@@ -60,6 +60,10 @@ async function run() {
 
     const rootDir = await easyFileSystem.getDirectory('/');
     console.log('rootDir:', await rootDir.read());
+
+    // Peek at what the server advertises after the demo has finished.
+    const metaAfter = await fetch(`http://localhost:${PORT}/blocks`);
+    console.log('GET /blocks:', await metaAfter.json());
 }
 
 run().catch(console.error);

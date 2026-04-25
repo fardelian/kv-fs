@@ -34,8 +34,9 @@ async function run() {
     // Create express router mapping HTTP endpoints to block device operations
 
     const router = express.Router();
-    const bdRouter = new KvBlockDeviceHttpRouter();
-    bdRouter.route(encryptedServerBlockDevice, router);
+    // new KvBlockDeviceHttpRouter(encryptedServerBlockDevice, router);
+    const bdRouter = new KvBlockDeviceHttpRouter(encryptedServerBlockDevice);
+    bdRouter.mount(router);
 
     // Start express app
 

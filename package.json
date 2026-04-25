@@ -14,6 +14,7 @@
     "start-local-fs": "tsx src/examples/example-local-fs.ts",
     "start-memory": "tsx src/examples/example-memory.ts",
     "start-sqlite": "tsx src/examples/example-sqlite.ts",
+    "start-sqlite-permanent": "tsx src/examples/example-sqlite-permanent.ts",
     "start-http-server": "tsx src/examples/example-http-server.ts",
     "start-http-client": "tsx src/examples/example-http-client.ts"
   },

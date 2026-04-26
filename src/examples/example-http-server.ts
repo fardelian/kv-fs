@@ -61,7 +61,20 @@ async function run() {
         });
     });
 
-    console.log('time:', new Date().getTime() - t0);
+    console.log('device:', {
+        blockSize: encryptedServerBlockDevice.getBlockSize(),
+        capacityBytes: encryptedServerBlockDevice.getCapacityBytes(),
+        capacityBlocks: encryptedServerBlockDevice.getCapacityBlocks(),
+        highestBlockId: await encryptedServerBlockDevice.getHighestBlockId(),
+    });
+    console.log(`time-to-listen: ${new Date().getTime() - t0}`);
+
+    // The server runs forever; trap SIGINT so the standard `time:` line
+    // still gets a chance to fire on Ctrl+C, then close the DB and exit.
+    process.on('SIGINT', () => {
+        console.log(`\ntime: ${new Date().getTime() - t0}`);
+        void database.close().finally(() => process.exit(0));
+    });
 }
 
 run().catch((err: unknown) => {

@@ -24,11 +24,11 @@ const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1024;
 const TOTAL_INODES = 256;
 
-async function buildHandlers(): Promise<KvFuseHandlers> {
+async function buildHandlers(): Promise<{ handlers: KvFuseHandlers; device: KvBlockDeviceMemory }> {
     const device = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     await KvFilesystem.format(device, TOTAL_INODES);
     const fs = new KvFilesystemSimple(new KvFilesystem(device, 0), '/');
-    return new KvFuseHandlers(fs, BLOCK_SIZE);
+    return { handlers: new KvFuseHandlers(fs, BLOCK_SIZE), device };
 }
 
 /** Map our friendly errno codes to whatever the binding's numeric values are. */
@@ -65,7 +65,9 @@ function adaptAsync<R>(
 }
 
 async function main(): Promise<void> {
-    const handlers = await buildHandlers();
+    const t0 = new Date().getTime();
+
+    const { handlers, device } = await buildHandlers();
 
     // ---- Wire to fuse-native (uncomment after `npm install fuse-native`) ----
     //
@@ -121,6 +123,14 @@ async function main(): Promise<void> {
     // Reference adaptAsync so TypeScript doesn't trim it as unused.
     void adaptAsync;
     void handlers;
+
+    console.log('device:', {
+        blockSize: device.getBlockSize(),
+        capacityBytes: device.getCapacityBytes(),
+        capacityBlocks: device.getCapacityBlocks(),
+        highestBlockId: await device.getHighestBlockId(),
+    });
+    console.log('time:', new Date().getTime() - t0);
 }
 
 main().catch((err: unknown) => {

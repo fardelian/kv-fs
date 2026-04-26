@@ -77,9 +77,6 @@ async function run() {
     const rootDir = await easyFileSystem.getDirectory('/');
     console.log('  rootDir:', await rootDir.read());
 
-    const highestBlockIdAfter = await sqliteBlockDevice.getHighestBlockId();
-    console.log(`  highestBlockId after: ${highestBlockIdAfter}`);
-
     // Per-run timestamp drop: /YYYY-MM-DD/HH-MM-SS.txt with the full ISO
     // string as content. The directory exists after the first run of the
     // day; subsequent runs reuse it (createDirectory throws
@@ -97,6 +94,13 @@ async function run() {
     const timeFile = await easyFileSystem.createFile(timePath);
     await timeFile.write(new TextEncoder().encode(isoNow));
     console.log(`  wrote ${timePath} = "${isoNow}"`);
+
+    console.log('device:', {
+        blockSize: sqliteBlockDevice.getBlockSize(),
+        capacityBytes: sqliteBlockDevice.getCapacityBytes(),
+        capacityBlocks: sqliteBlockDevice.getCapacityBlocks(),
+        highestBlockId: await sqliteBlockDevice.getHighestBlockId(),
+    });
 
     console.log('time:', new Date().getTime() - t0);
 }

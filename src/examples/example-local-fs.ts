@@ -83,6 +83,13 @@ async function run() {
     const wholeAfter = await partialFile.read();
     console.log('  full file after writePartial:', decoder.decode(wholeAfter));
 
+    console.log('device:', {
+        blockSize: encryptedFsBlockDevice.getBlockSize(),
+        capacityBytes: encryptedFsBlockDevice.getCapacityBytes(),
+        capacityBlocks: encryptedFsBlockDevice.getCapacityBlocks(),
+        highestBlockId: await encryptedFsBlockDevice.getHighestBlockId(),
+    });
+
     console.log('time:', new Date().getTime() - t0);
 }
 

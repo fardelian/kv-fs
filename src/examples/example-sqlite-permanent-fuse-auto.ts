@@ -104,6 +104,13 @@ async function run(): Promise<void> {
         console.log(`[6/${STEP_COUNT}] host view (via Node fs/promises):`);
         const dbStat = await stat(DB_PATH);
         console.log(fmtRow(DB_PATH.replace(`${LOCAL_FS_PATH}/`, ''), dbStat.size, dbStat.birthtime));
+
+        console.log('device:', {
+            blockSize: blockDevice.getBlockSize(),
+            capacityBytes: blockDevice.getCapacityBytes(),
+            capacityBlocks: blockDevice.getCapacityBlocks(),
+            highestBlockId: await blockDevice.getHighestBlockId(),
+        });
     } finally {
         await database.close();
     }

@@ -52,6 +52,13 @@ async function run() {
     const rootDir = await easyFileSystem.getDirectory('/');
     console.log('  rootDir:', await rootDir.read());
 
+    console.log('device:', {
+        blockSize: memoryBlockDevice.getBlockSize(),
+        capacityBytes: memoryBlockDevice.getCapacityBytes(),
+        capacityBlocks: memoryBlockDevice.getCapacityBlocks(),
+        highestBlockId: await memoryBlockDevice.getHighestBlockId(),
+    });
+
     console.log('time:', new Date().getTime() - t0);
 }
 

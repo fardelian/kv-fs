@@ -280,6 +280,12 @@ async function run(): Promise<void> {
         });
     });
     console.log(`[6/${STEP_COUNT}] mounted at ${MOUNT_POINT}.`);
+    console.log('device:', {
+        blockSize: blockDevice.getBlockSize(),
+        capacityBytes: blockDevice.getCapacityBytes(),
+        capacityBlocks: blockDevice.getCapacityBlocks(),
+        highestBlockId: await blockDevice.getHighestBlockId(),
+    });
     console.log('time:', new Date().getTime() - t0);
     console.log('Spawning zsh with cwd=$KVFS_MOUNT. Try:');
     console.log('  ls -al');

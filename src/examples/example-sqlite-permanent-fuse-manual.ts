@@ -317,10 +317,17 @@ async function run(): Promise<void> {
         });
     };
 
-    const shell = spawn('bash', [], {
+    // Do *not* pass `cwd: MOUNT_POINT` to spawn() — on macOS that becomes
+    // a `posix_spawn_file_actions_addchdir_np` and the chdir into the FUSE
+    // mount happens during the spawn syscall, which sends a LOOKUP
+    // request to the FUSE daemon (us) while our event loop is still
+    // blocked inside posix_spawn waiting for child setup. Hard freeze
+    // until the mount is torn down (then spawn fails with ENOTCONN).
+    // Have bash do the cd itself after it's running — by then our event
+    // loop is free to serve the FUSE callbacks and the cd succeeds.
+    const shell = spawn('bash', ['-c', 'cd "$KVFS_MOUNT" && exec bash'], {
         stdio: 'inherit',
         env: { ...process.env, KVFS_MOUNT: MOUNT_POINT },
-        cwd: MOUNT_POINT,
     });
 
     shell.on('exit', (code, signal) => {

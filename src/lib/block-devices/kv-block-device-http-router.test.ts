@@ -423,7 +423,7 @@ describe('KvBlockDeviceHttpRouter', () => {
             const res = await invoke(fakeRouter, 'POST', '/blocks/batch', { body: undefined });
 
             expect(res.statusCode).toBe(400);
-            expect(res.body).toEqual({ error: 'Expected { ops: [...] } JSON body.' });
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
         });
 
         it('returns 400 when ops is not an array', async () => {
@@ -442,7 +442,7 @@ describe('KvBlockDeviceHttpRouter', () => {
             });
 
             expect(res.statusCode).toBe(400);
-            expect(res.body).toEqual({ error: 'Each op needs a string op.' });
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
         });
 
         it('returns 400 when an op is missing a numeric blockId', async () => {
@@ -453,7 +453,7 @@ describe('KvBlockDeviceHttpRouter', () => {
             });
 
             expect(res.statusCode).toBe(400);
-            expect(res.body).toEqual({ error: 'Each op needs a numeric blockId.' });
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
         });
 
         it('returns 400 when a write op is missing the hex data field', async () => {
@@ -464,7 +464,7 @@ describe('KvBlockDeviceHttpRouter', () => {
             });
 
             expect(res.statusCode).toBe(400);
-            expect(res.body).toEqual({ error: 'Write op requires hex `data`.' });
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
         });
 
         it('returns 400 for an unknown op kind', async () => {
@@ -475,7 +475,7 @@ describe('KvBlockDeviceHttpRouter', () => {
             });
 
             expect(res.statusCode).toBe(400);
-            expect(res.body).toEqual({ error: 'Unknown op: unknown' });
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
         });
 
         it('runs alloc and surfaces the new blockId', async () => {
@@ -528,7 +528,7 @@ describe('KvBlockDeviceHttpRouter', () => {
             });
 
             expect(res.statusCode).toBe(400);
-            expect(res.body).toEqual({ error: 'partial-read op requires numeric `start` and `end`.' });
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
         });
 
         it('returns 400 when partial-write is missing offset', async () => {
@@ -539,7 +539,7 @@ describe('KvBlockDeviceHttpRouter', () => {
             });
 
             expect(res.statusCode).toBe(400);
-            expect(res.body).toEqual({ error: 'partial-write op requires numeric `offset`.' });
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
         });
 
         it('returns 400 when partial-write is missing hex data', async () => {
@@ -550,7 +550,29 @@ describe('KvBlockDeviceHttpRouter', () => {
             });
 
             expect(res.statusCode).toBe(400);
-            expect(res.body).toEqual({ error: 'partial-write op requires hex `data`.' });
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
+        });
+
+        it('returns 400 when a write op carries odd-length hex data', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'write', blockId: 0, data: 'abc' }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
+        });
+
+        it('returns 400 when a write op carries non-hex characters', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'write', blockId: 0, data: 'zzzz' }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect((res.body as { error: string }).error).toEqual(expect.any(String));
         });
     });
 

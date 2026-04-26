@@ -39,7 +39,8 @@
   },
   "dependencies": {
     "express": "5.2.1",
-    "promised-sqlite3": "2.1.0"
+    "promised-sqlite3": "2.1.0",
+    "zod": "4.3.6"
   },
   "optionalDependencies": {
     "@cocalc/fuse-native": "2.4.3"

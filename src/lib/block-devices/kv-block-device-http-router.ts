@@ -1,20 +1,7 @@
 import { KvBatchOp, KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
-import { WireBatchOp, WireBatchResult } from './kv-block-device-common';
+import { WireBatchResult } from './kv-block-device-common';
 import { Router } from 'express';
-
-/**
- * Parse `:blockId` and validate it falls inside the device's
- * current capacity. Returns -1 to signal "invalid" (per the
- * codebase convention of using -1 instead of null/undefined for
- * block-device-shaped values). Callers then 400 the request.
- */
-const parseBlockId = (blockDevice: KvBlockDevice, id: unknown): number => {
-    const blockId = Number(id);
-    if (!Number.isInteger(blockId) || blockId < 0 || blockId >= blockDevice.getCapacityBlocks()) {
-        return -1;
-    }
-    return blockId;
-};
+import { z } from 'zod';
 
 /**
  * Wires a `KvBlockDevice` up to an Express router so it can be driven
@@ -31,6 +18,10 @@ const parseBlockId = (blockDevice: KvBlockDevice, id: unknown): number => {
  *
  * Metadata-only endpoints (`GET /blocks`, `DELETE /blocks?confirm=yes`,
  * `POST /blocks` allocation response, error responses) still use JSON.
+ *
+ * Every untrusted input — params, query, body — is funnelled through a
+ * zod schema (see the `*Schema` consts below) so validation lives in
+ * one place per shape and the handlers only see typed, parsed values.
  */
 export class KvBlockDeviceHttpRouter {
     private readonly blockDevice: KvBlockDevice;
@@ -64,26 +55,13 @@ export class KvBlockDeviceHttpRouter {
             // Mounted before POST /blocks so the more specific path
             // matches first.
             .post('/blocks/batch', async (req, res) => {
-                const body = req.body as { ops?: unknown } | undefined;
-                if (!body || !Array.isArray(body.ops)) {
-                    res.status(400).json({ error: 'Expected { ops: [...] } JSON body.' });
+                const parsed = batchBodySchema.safeParse(req.body);
+                if (!parsed.success) {
+                    res.status(400).json({ error: zodMessage(parsed.error) });
                     return;
                 }
 
-                // Validate each raw JSON op into a typed `WireBatchOp`,
-                // then convert it to a `KvBatchOp` (raw bytes instead of
-                // hex). Unknown / malformed ops 400 the whole batch.
-                const ops: KvBatchOp[] = [];
-                const validation = validateWireBatchOps(body.ops);
-                if (!validation.ok) {
-                    res.status(400).json({ error: validation.error });
-                    return;
-                }
-                for (const wireOp of validation.ops) {
-                    ops.push(wireOpToBatchOp(wireOp));
-                }
-
-                const results = await this.blockDevice.batch(ops);
+                const results = await this.blockDevice.batch(parsed.data.ops);
                 const wireResults: WireBatchResult[] = results.map((r) => {
                     if (!r.ok) return { ok: false, error: r.error };
                     const wire: WireBatchResult = { ok: true };
@@ -101,9 +79,9 @@ export class KvBlockDeviceHttpRouter {
             .post('/blocks', async (req, res) => {
                 const blockId = await this.blockDevice.allocateBlock();
 
-                const body = bodyAsBytes(req.body);
-                if (body !== undefined && body.length > 0) {
-                    await this.blockDevice.writeBlock(blockId, body);
+                const body = bodyBytesSchema.safeParse(req.body);
+                if (body.success && body.data.length > 0) {
+                    await this.blockDevice.writeBlock(blockId, body.data);
                 }
 
                 res.json({ data: { blockId } });
@@ -115,7 +93,7 @@ export class KvBlockDeviceHttpRouter {
             // a stray DELETE can't nuke the device. The exact value has
             // to be `yes` — anything else is rejected.
             .delete('/blocks', async (req, res) => {
-                if (req.query.confirm !== 'yes') {
+                if (!formatConfirmSchema.safeParse(req.query).success) {
                     res.status(403).json({ data: {} });
                     return;
                 }
@@ -127,8 +105,8 @@ export class KvBlockDeviceHttpRouter {
             // doesn't, 400 = malformed/out-of-range ID. Cheap because the
             // body is empty.
             .head('/blocks/:blockId', async (req, res) => {
-                const blockId = parseBlockId(this.blockDevice, req.params.blockId);
-                if (blockId === -1) {
+                const blockId = this.parseBlockIdParam(req.params.blockId);
+                if (blockId === null) {
                     res.status(400).end();
                     return;
                 }
@@ -143,18 +121,18 @@ export class KvBlockDeviceHttpRouter {
             // delegating to `readBlockPartial`. Both must be present
             // and parseable; missing/invalid → 400.
             .get('/blocks/:blockId', async (req, res) => {
-                const blockId = parseBlockId(this.blockDevice, req.params.blockId);
-                if (blockId === -1) {
+                const blockId = this.parseBlockIdParam(req.params.blockId);
+                if (blockId === null) {
                     res.status(400).json({ error: `Invalid block ID: ${req.params.blockId}` });
                     return;
                 }
-                const partial = parsePartialRange(req.query);
-                if (partial === 'invalid') {
+                const range = parseRangeQuery(req.query);
+                if (range === 'invalid') {
                     res.status(400).json({ error: 'Invalid `start` / `end` query parameters.' });
                     return;
                 }
-                const block = partial
-                    ? await this.blockDevice.readBlockPartial(blockId, partial.start, partial.end)
+                const block = range
+                    ? await this.blockDevice.readBlockPartial(blockId, range.start, range.end)
                     : await this.blockDevice.readBlock(blockId);
                 res.type('application/octet-stream').send(Buffer.from(block));
             })
@@ -166,25 +144,25 @@ export class KvBlockDeviceHttpRouter {
             // starting at `offset`, leaving the surrounding bytes
             // untouched (`writeBlockPartial`).
             .put('/blocks/:blockId', async (req, res) => {
-                const blockId = parseBlockId(this.blockDevice, req.params.blockId);
-                if (blockId === -1) {
+                const blockId = this.parseBlockIdParam(req.params.blockId);
+                if (blockId === null) {
                     res.status(400).json({ error: `Invalid block ID: ${req.params.blockId}` });
                     return;
                 }
-                const data = bodyAsBytes(req.body);
-                if (data === undefined) {
+                const body = bodyBytesSchema.safeParse(req.body);
+                if (!body.success) {
                     res.status(400).json({ error: 'Expected application/octet-stream body.' });
                     return;
                 }
-                const offset = parsePartialOffset(req.query);
+                const offset = parseOffsetQuery(req.query);
                 if (offset === 'invalid') {
                     res.status(400).json({ error: 'Invalid `offset` query parameter.' });
                     return;
                 }
                 if (offset === null) {
-                    await this.blockDevice.writeBlock(blockId, data);
+                    await this.blockDevice.writeBlock(blockId, body.data);
                 } else {
-                    await this.blockDevice.writeBlockPartial(blockId, offset, data);
+                    await this.blockDevice.writeBlockPartial(blockId, offset, body.data);
                 }
                 res.status(204).end();
             })
@@ -192,8 +170,8 @@ export class KvBlockDeviceHttpRouter {
             // DELETE /blocks/:blockId — free the block. After this,
             // existsBlock will return false until the ID is reallocated.
             .delete('/blocks/:blockId', async (req, res) => {
-                const blockId = parseBlockId(this.blockDevice, req.params.blockId);
-                if (blockId === -1) {
+                const blockId = this.parseBlockIdParam(req.params.blockId);
+                if (blockId === null) {
                     res.status(400).json({ error: `Invalid block ID: ${req.params.blockId}` });
                     return;
                 }
@@ -201,134 +179,128 @@ export class KvBlockDeviceHttpRouter {
                 res.status(204).end();
             });
     }
+
+    /**
+     * Block-ID parameter validation: `blockIdShape` checks integer /
+     * non-negative; the capacity bound is checked here because it's
+     * read live from the device (capacity may be reconfigured at
+     * runtime). Returns `null` on any failure — caller 400s.
+     */
+    private parseBlockIdParam(raw: unknown): number | null {
+        const parsed = blockIdShape.safeParse(raw);
+        if (!parsed.success || parsed.data >= this.blockDevice.getCapacityBlocks()) return null;
+        return parsed.data;
+    }
 }
 
+// ---- Schemas ----
+
+/** Block IDs come from URL params (strings) so we coerce. */
+const blockIdShape = z.coerce.number().int().nonnegative();
+
+/** Byte offsets / ranges inside a block. Same shape as block IDs at this layer. */
+const byteOffsetShape = z.coerce.number().int().nonnegative();
+
 /**
- * Best-effort coercion of a request body into a `Uint8Array`. Express's
- * `raw()` middleware delivers a `Buffer`, which is already a `Uint8Array`
- * subclass; absence (`undefined` / empty Buffer) is treated as "no body".
+ * Hex string → `Uint8Array` transform. `hex` is whatever made it past
+ * the JSON parser, so the schema also rejects anything that isn't a
+ * valid hex pair sequence (Node's `Buffer.from(_, 'hex')` truncates on
+ * the first invalid byte — we re-encode and compare to catch that).
  */
-function bodyAsBytes(body: unknown): Uint8Array | undefined {
-    if (Buffer.isBuffer(body)) {
-        return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+const hexBytesSchema = z.string().transform((hex, ctx) => {
+    if (hex.length % 2 !== 0) {
+        ctx.addIssue({ code: 'custom', message: 'Hex string must have even length.' });
+        return z.NEVER;
     }
-    if (body instanceof Uint8Array) {
-        return body;
+    const buf = Buffer.from(hex, 'hex');
+    if (buf.length * 2 !== hex.length) {
+        ctx.addIssue({ code: 'custom', message: 'Hex string contains invalid characters.' });
+        return z.NEVER;
     }
-    return undefined;
+    return new Uint8Array(buf);
+});
+
+/**
+ * Wire batch ops, parsed straight into `KvBatchOp` (hex `data` becomes
+ * `Uint8Array` via `hexBytesSchema`). The discriminator on `op` lets
+ * zod give a precise error when a variant is missing required fields.
+ */
+const batchOpSchema: z.ZodType<KvBatchOp> = z.discriminatedUnion('op', [
+    z.object({ op: z.literal('alloc') }),
+    z.object({ op: z.literal('read'), blockId: z.number().int().nonnegative() }),
+    z.object({ op: z.literal('free'), blockId: z.number().int().nonnegative() }),
+    z.object({ op: z.literal('write'), blockId: z.number().int().nonnegative(), data: hexBytesSchema }),
+    z.object({
+        op: z.literal('partial-read'),
+        blockId: z.number().int().nonnegative(),
+        start: z.number().int().nonnegative(),
+        end: z.number().int().nonnegative(),
+    }),
+    z.object({
+        op: z.literal('partial-write'),
+        blockId: z.number().int().nonnegative(),
+        offset: z.number().int().nonnegative(),
+        data: hexBytesSchema,
+    }),
+]);
+
+const batchBodySchema = z.object({ ops: z.array(batchOpSchema) });
+
+/** `?confirm=yes` gate for the device-wide `DELETE /blocks`. Anything else is rejected. */
+const formatConfirmSchema = z.object({ confirm: z.literal('yes') });
+
+/** Both `start` and `end` required; `end >= start`. */
+const partialRangeSchema = z.object({
+    start: byteOffsetShape,
+    end: byteOffsetShape,
+}).refine((v) => v.end >= v.start);
+
+const partialOffsetSchema = z.object({ offset: byteOffsetShape });
+
+/**
+ * Express's `raw()` middleware delivers a `Buffer`; tests / other
+ * middleware may deliver a plain `Uint8Array`. Buffer extends Uint8Array
+ * but we re-view it so the returned bytes don't carry Buffer's prototype
+ * methods — keeps the call site dealing in plain Uint8Array.
+ */
+const bodyBytesSchema = z.union([
+    z.instanceof(Buffer).transform((b) => new Uint8Array(b.buffer, b.byteOffset, b.byteLength)),
+    z.instanceof(Uint8Array),
+]);
+
+// ---- Helpers ----
+
+/**
+ * `?start=X&end=Y` lifted out of `req.query`. Returns `null` for the
+ * "no range" case (full-block read), the parsed range when both parse,
+ * or `'invalid'` on any other shape — including the mixed-presence case
+ * (only one of the two), which the schema rejects because both fields
+ * are required.
+ */
+function parseRangeQuery(query: unknown): { start: number; end: number } | null | 'invalid' {
+    const q = query as { start?: unknown; end?: unknown };
+    if (q.start === undefined && q.end === undefined) return null;
+    const result = partialRangeSchema.safeParse(q);
+    return result.success ? { start: result.data.start, end: result.data.end } : 'invalid';
+}
+
+/** `?offset=X` lifted out of `req.query`. Same null/value/'invalid' shape. */
+function parseOffsetQuery(query: unknown): number | null | 'invalid' {
+    const q = query as { offset?: unknown };
+    if (q.offset === undefined) return null;
+    const result = partialOffsetSchema.safeParse(q);
+    return result.success ? result.data.offset : 'invalid';
 }
 
 function hexEncode(bytes: Uint8Array): string {
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('hex');
 }
 
-function hexDecode(hex: string): Uint8Array {
-    return new Uint8Array(Buffer.from(hex, 'hex'));
-}
-
 /**
- * Walk an array of raw JSON ops and narrow each one into a
- * `WireBatchOp`. Returns the narrowed list on success, or the first
- * validation error (caller 400s the whole request — partial successes
- * are wrong here because the rest of the batch may depend on the
- * malformed entry's side effects).
+ * First issue's message — the batch schema bails on first failure
+ * anyway. `err.issues` always has at least one entry when `safeParse`
+ * returned `success: false`, so no fallback is needed.
  */
-function validateWireBatchOps(rawOps: unknown[]):
-    | { ok: true; ops: WireBatchOp[] }
-    | { ok: false; error: string } {
-    const ops: WireBatchOp[] = [];
-    for (const raw of rawOps) {
-        const o = raw as Record<string, unknown>;
-        if (typeof o.op !== 'string') {
-            return { ok: false, error: 'Each op needs a string op.' };
-        }
-        if (o.op === 'alloc') {
-            ops.push({ op: 'alloc' });
-            continue;
-        }
-        if (typeof o.blockId !== 'number') {
-            return { ok: false, error: 'Each op needs a numeric blockId.' };
-        }
-        const blockId = o.blockId;
-        if (o.op === 'read') {
-            ops.push({ op: 'read', blockId });
-        } else if (o.op === 'free') {
-            ops.push({ op: 'free', blockId });
-        } else if (o.op === 'write') {
-            if (typeof o.data !== 'string') {
-                return { ok: false, error: 'Write op requires hex `data`.' };
-            }
-            ops.push({ op: 'write', blockId, data: o.data });
-        } else if (o.op === 'partial-read') {
-            if (typeof o.start !== 'number' || typeof o.end !== 'number') {
-                return { ok: false, error: 'partial-read op requires numeric `start` and `end`.' };
-            }
-            ops.push({ op: 'partial-read', blockId, start: o.start, end: o.end });
-        } else if (o.op === 'partial-write') {
-            if (typeof o.offset !== 'number') {
-                return { ok: false, error: 'partial-write op requires numeric `offset`.' };
-            }
-            if (typeof o.data !== 'string') {
-                return { ok: false, error: 'partial-write op requires hex `data`.' };
-            }
-            ops.push({ op: 'partial-write', blockId, offset: o.offset, data: o.data });
-        } else {
-            return { ok: false, error: `Unknown op: ${o.op}` };
-        }
-    }
-    return { ok: true, ops };
-}
-
-/**
- * Lift a validated `WireBatchOp` (hex-encoded data) to its `KvBatchOp`
- * equivalent (raw `Uint8Array` data). The discriminator keeps both
- * sides aligned so a future variant added to one shows up as a missing
- * case here.
- */
-function wireOpToBatchOp(o: WireBatchOp): KvBatchOp {
-    switch (o.op) {
-        case 'read':
-            return { op: 'read', blockId: o.blockId };
-        case 'write':
-            return { op: 'write', blockId: o.blockId, data: hexDecode(o.data) };
-        case 'free':
-            return { op: 'free', blockId: o.blockId };
-        case 'alloc':
-            return { op: 'alloc' };
-        case 'partial-read':
-            return { op: 'partial-read', blockId: o.blockId, start: o.start, end: o.end };
-        case 'partial-write':
-            return { op: 'partial-write', blockId: o.blockId, offset: o.offset, data: hexDecode(o.data) };
-    }
-}
-
-/**
- * Parse `?start=X&end=Y` from a query string. Returns `null` when
- * neither is present (caller should do a full-block read), an object
- * when both parse cleanly, or `'invalid'` when one is present but
- * malformed (caller should 400). Mixed presence (only one of the two)
- * counts as invalid.
- */
-function parsePartialRange(query: unknown): { start: number; end: number } | null | 'invalid' {
-    const q = query as { start?: unknown; end?: unknown };
-    if (q.start === undefined && q.end === undefined) return null;
-    const start = Number(q.start);
-    const end = Number(q.end);
-    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
-        return 'invalid';
-    }
-    return { start, end };
-}
-
-/**
- * Parse `?offset=X` from a query string. Returns `null` when absent
- * (full-block write), the parsed offset when valid, `'invalid'`
- * otherwise.
- */
-function parsePartialOffset(query: unknown): number | null | 'invalid' {
-    const q = query as { offset?: unknown };
-    if (q.offset === undefined) return null;
-    const offset = Number(q.offset);
-    if (!Number.isInteger(offset) || offset < 0) return 'invalid';
-    return offset;
+function zodMessage(err: z.ZodError): string {
+    return err.issues[0].message;
 }

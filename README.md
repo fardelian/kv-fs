@@ -163,11 +163,13 @@ wrap their own block device with `KvEncryptedBlockDevice`, but for different rea
 There are two FUSE examples; they target the same `KvFuseHandlers` adapter from different angles:
 
 - [`example-sqlite-permanent-fuse-auto.ts`](src/examples/example-sqlite-permanent-fuse-auto.ts) — drives the FUSE handler API in-process. Useful as a smoke test or a tour of the adapter; does **not** actually mount, so you don't need any system FUSE library to run it. `npm run start-sqlite-permanent-fuse`.
-- [`example-sqlite-permanent-fuse-manual.ts`](src/examples/example-sqlite-permanent-fuse-manual.ts) — *really* mounts the kv-fs at an OS mount point via [`fuse-native`](https://www.npmjs.com/package/fuse-native), then drops you into a `bash` session with `$KVFS_MOUNT` pointing at the mount. `ls`, `cat`, `echo >>`, `cp`, `df`, `touch`, `chmod` (silently ignored) all flow through the kernel into our handlers.
+- [`example-sqlite-permanent-fuse-manual.ts`](src/examples/example-sqlite-permanent-fuse-manual.ts) — *really* mounts the kv-fs at an OS mount point via [`@cocalc/fuse-native`](https://www.npmjs.com/package/@cocalc/fuse-native), then drops you into a `bash` session with `$KVFS_MOUNT` pointing at the mount. `ls`, `cat`, `echo >>`, `cp`, `df`, `touch`, `chmod` (silently ignored) all flow through the kernel into our handlers.
 
-`fuse-native` is declared as an `optionalDependency` and as a `trustedDependency`, so `bun install` will compile it (and run its postinstall to fetch / build the native binary) on systems where the OS-level FUSE library is present, and silently skip it everywhere else. There's no `bun add` step.
+We use [`@cocalc/fuse-native`](https://www.npmjs.com/package/@cocalc/fuse-native) rather than the original [`fuse-native`](https://www.npmjs.com/package/fuse-native): the original has been unmaintained since 2021 and its native binary segfaults inside `mount()` on recent macOS releases (macFUSE 4+ / Apple Silicon). The cocalc fork keeps the same API and rebuilds against modern macFUSE / FUSE-T / libfuse.
 
-This particular example runs under [`tsx`](https://www.npmjs.com/package/tsx) (Node + TypeScript loader) rather than bun. As of bun 1.3, Bun's NAPI loader segfaults when `fuse-native` is imported — Node loads the same binding cleanly. Every other script in the project still runs under bun; only this one is special.
+`@cocalc/fuse-native` is declared as an `optionalDependency` and as a `trustedDependency`, so `bun install` will compile it (and run its postinstall to fetch / build the native binary) on systems where the OS-level FUSE library is present, and silently skip it everywhere else. There's no `bun add` step.
+
+This particular example runs under [`tsx`](https://www.npmjs.com/package/tsx) (Node + TypeScript loader) rather than bun. As of bun 1.3, Bun's NAPI loader segfaults when the FUSE binding is imported — Node loads it cleanly. Every other script in the project still runs under bun; only this one is special.
 
 To run the manual mount example:
 

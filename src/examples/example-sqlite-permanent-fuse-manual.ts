@@ -6,15 +6,21 @@
  * into our handlers.
  *
  * Unlike `example-sqlite-permanent-fuse-auto.ts` (which only walks the
- * FUSE handlers in-process), this one loads `fuse-native` and mounts
- * at a real OS mount point. The native binding is declared as an
- * `optionalDependency` in package.json — it will compile during
- * `bun install` if the OS-level FUSE library is present (macFUSE /
- * FUSE-T on macOS, libfuse on Linux) and silently skip otherwise.
+ * FUSE handlers in-process), this one loads `@cocalc/fuse-native` and
+ * mounts at a real OS mount point. We use the cocalc fork rather than
+ * the original `fuse-native` (which has been unmaintained since 2021):
+ * the fork is rebuilt against modern macFUSE / FUSE-T / libfuse so
+ * `mount()` doesn't segfault on recent macOS / Linux releases. Same
+ * API on both.
+ *
+ * The native binding is declared as an `optionalDependency` in
+ * package.json — it will compile during `bun install` if the
+ * OS-level FUSE library is present (macFUSE / FUSE-T on macOS,
+ * libfuse on Linux) and silently skip otherwise.
  *
  * Lifecycle:
  *   1. Open SQLite, format the volume on first run.
- *   2. Mount via fuse-native at `$KVFS_MOUNT` (default `/tmp/kvfs-manual`).
+ *   2. Mount via FUSE at `$KVFS_MOUNT` (default `/tmp/kvfs-manual`).
  *   3. Spawn `bash` with stdio inherited and `KVFS_MOUNT` exported.
  *   4. When the shell exits — `exit` / Ctrl+D — run shutdown:
  *      `fuse.unmount → KvFilesystem.flush() → database.close() → exit 0`.
@@ -31,8 +37,8 @@ import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvFuseError, KvFuseHandlers } from '../lib/fuse';
 
-// The minimal type stub for `fuse-native` lives in the sibling
-// `fuse-native.d.ts` so this file stays a plain module.
+// The minimal type stub for `@cocalc/fuse-native` lives in the
+// sibling `cocalc-fuse-native.d.ts` so this file stays a plain module.
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -88,14 +94,14 @@ function adaptAsync<R>(
 }
 
 async function run(): Promise<void> {
-    console.log('[1/6] loading fuse-native...');
-    let Fuse: typeof import('fuse-native').default;
+    console.log('[1/6] loading @cocalc/fuse-native...');
+    let Fuse: typeof import('@cocalc/fuse-native').default;
     try {
-        const mod = await import('fuse-native');
+        const mod = await import('@cocalc/fuse-native');
         Fuse = mod.default;
         console.log(`      loaded; default export typeof = ${typeof Fuse}`);
     } catch (err: unknown) {
-        console.error('`fuse-native` did not load:', err);
+        console.error('`@cocalc/fuse-native` did not load:', err);
         console.error('It is an optionalDependency, so `bun install` skips it silently');
         console.error('when the OS-level FUSE library is missing. To fix it:');
         console.error('  - macOS: install macFUSE (https://osxfuse.github.io/) or FUSE-T (https://www.fuse-t.org/),');

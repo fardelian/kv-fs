@@ -39,12 +39,12 @@
     "promised-sqlite3": "2.1.0"
   },
   "optionalDependencies": {
-    "fuse-native": "2.2.6"
+    "@cocalc/fuse-native": "2.4.3"
   },
   "overrides": {
     "sqlite3": "6.0.1"
   },
   "trustedDependencies": [
-    "fuse-native"
+    "@cocalc/fuse-native"
   ]
 }

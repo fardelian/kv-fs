@@ -93,8 +93,12 @@ export class KvEncryptionAES256XTSKey implements KvEncryption {
         }
 
         // Encode the sector number as 16 bytes little-endian (XTS standard).
+        // Block IDs are uint32 across the codebase (KvINodeFile data-block IDs,
+        // NO_BLOCK = 0xFFFFFFFF, directory entries), so 4 bytes is enough — the
+        // remaining 12 bytes stay at zero, which is the same as what
+        // setBigUint64 would have written for any uint32 input.
         const sectorBytes = new Uint8Array(blockBytes);
-        new DataView(sectorBytes.buffer).setBigUint64(0, BigInt(sectorNumber), true);
+        new DataView(sectorBytes.buffer).setUint32(0, sectorNumber, true);
 
         // Initial tweak: AES-ECB(tweakKey, sectorBytes).
         const tweakCipher = createCipheriv('aes-256-ecb', tweakKey, null);

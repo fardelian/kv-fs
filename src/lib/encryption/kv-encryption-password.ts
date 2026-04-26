@@ -19,12 +19,19 @@ export class KvEncryptionPassword extends KvEncryptionAES256CBCKey {
      * @param iterations  PBKDF2 iteration count. Higher is slower for both
      *                    legitimate users and attackers; 100_000+ recommended.
      */
+    /**
+     * @param randomBytesProvider  Test-only override of the IV source.
+     *                             Production should always leave this
+     *                             unset so the default `crypto.randomBytes`
+     *                             RNG is used.
+     */
     constructor(
         password: string,
         salt: string,
         iterations = 100_000,
+        randomBytesProvider?: (n: number) => Uint8Array,
     ) {
-        super();
+        super(randomBytesProvider);
         const key = this.generateKeyFromPassword(password, salt, iterations);
         this.setKey(key);
     }

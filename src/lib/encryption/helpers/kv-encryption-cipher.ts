@@ -20,6 +20,14 @@ export abstract class KvEncryptionCipher implements KvEncryption {
     protected readonly keyLengthBytes: number;
     protected readonly ivLengthBytes: number;
     protected readonly keyPasswordDigest;
+    /**
+     * Source of fresh IV bytes for each encrypt call. Defaults to Node's
+     * `crypto.randomBytes`. Tests inject a fixed-output stub here so a
+     * single encrypt produces deterministic ciphertext that can be
+     * compared against a precomputed vector. **Never override in
+     * production** — semantic security depends on a real RNG.
+     */
+    protected readonly randomBytesProvider: (n: number) => Uint8Array;
 
     protected key!: Uint8Array;
 
@@ -28,12 +36,14 @@ export abstract class KvEncryptionCipher implements KvEncryption {
         keyLengthBytes: number,
         ivLengthBytes: number,
         keyPasswordDigest: string,
+        randomBytesProvider: (n: number) => Uint8Array = randomBytes,
     ) {
         // TODO: Switch from CBC to GCM
         this.algorithm = algorithm as CipherGCMTypes;
         this.keyLengthBytes = keyLengthBytes;
         this.ivLengthBytes = ivLengthBytes;
         this.keyPasswordDigest = keyPasswordDigest;
+        this.randomBytesProvider = randomBytesProvider;
     }
 
     /**
@@ -67,7 +77,7 @@ export abstract class KvEncryptionCipher implements KvEncryption {
      */
     @Init
     public async encrypt(_blockId: number, data: Uint8Array): Promise<Uint8Array> {
-        const iv = randomBytes(this.ivLengthBytes);
+        const iv = this.randomBytesProvider(this.ivLengthBytes);
         const cipher = createCipheriv(this.algorithm, this.key, iv);
         const encryptedData = concatBytes([cipher.update(data), cipher.final()]);
         return concatBytes([iv, encryptedData]);

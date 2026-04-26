@@ -4,7 +4,12 @@ import stylistic from '@stylistic/eslint-plugin';
 
 export default tseslint.config(
     {
-        ignores: ['dist/', 'node_modules/', 'data/', '.coverage/'],
+        // `scripts/` holds standalone Node helpers that are run by
+        // hand (e.g. `node scripts/generate-encryption-vectors.mjs`)
+        // and aren't part of the project's TS compile graph; lint
+        // would need a separate Node-globals config to handle them
+        // and there's no real benefit to linting throwaway helpers.
+        ignores: ['dist/', 'node_modules/', 'data/', '.coverage/', 'coverage/', 'scripts/'],
     },
 
     js.configs.recommended,

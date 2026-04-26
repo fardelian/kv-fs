@@ -34,16 +34,34 @@ export class KvEncryptionAES256GCMKey implements KvEncryption {
         = KvEncryptionAES256GCMKey.NONCE_LENGTH_BYTES + KvEncryptionAES256GCMKey.TAG_LENGTH_BYTES;
 
     private readonly key: Uint8Array;
+    /**
+     * Source of fresh nonce bytes for each encrypt call. Defaults to
+     * Node's `crypto.randomBytes`. Tests inject a fixed-output stub so
+     * a single encrypt produces deterministic ciphertext that matches
+     * a precomputed vector. **Never override in production** — GCM's
+     * security collapses if the same (key, nonce) pair ever repeats.
+     */
+    private readonly randomBytesProvider: (n: number) => Uint8Array;
 
-    constructor(key: Uint8Array) {
+    /**
+     * @param randomBytesProvider  Test-only override of the nonce
+     *                             source. Production should always
+     *                             leave this unset so the default
+     *                             `crypto.randomBytes` RNG is used.
+     */
+    constructor(
+        key: Uint8Array,
+        randomBytesProvider: (n: number) => Uint8Array = randomBytes,
+    ) {
         if (key.length !== KvEncryptionAES256GCMKey.KEY_LENGTH_BYTES) {
             throw new KvError_Enc_Key(`Encryption key must be ${KvEncryptionAES256GCMKey.KEY_LENGTH_BYTES * 8} bits (${KvEncryptionAES256GCMKey.KEY_LENGTH_BYTES} bytes). Received ${key.length} bytes.`);
         }
         this.key = new Uint8Array(key);
+        this.randomBytesProvider = randomBytesProvider;
     }
 
     public async encrypt(blockId: number, data: Uint8Array): Promise<Uint8Array> {
-        const nonce = randomBytes(KvEncryptionAES256GCMKey.NONCE_LENGTH_BYTES);
+        const nonce = this.randomBytesProvider(KvEncryptionAES256GCMKey.NONCE_LENGTH_BYTES);
         const cipher = createCipheriv('aes-256-gcm', this.key, nonce);
         cipher.setAAD(this.aadFromBlockId(blockId));
         const ciphertext = concatBytes([cipher.update(data), cipher.final()]);
@@ -71,10 +89,15 @@ export class KvEncryptionAES256GCMKey implements KvEncryption {
         return concatBytes([decipher.update(ciphertext), decipher.final()]);
     }
 
-    /** Encode the block ID as 8 bytes big-endian for use as additional authenticated data. */
+    /**
+     * Encode the block ID as 4 bytes big-endian for use as additional
+     * authenticated data. Block IDs are uint32 across the codebase, so 4
+     * bytes is enough — endianness only has to be consistent between
+     * encrypt and decrypt, not match any external standard.
+     */
     private aadFromBlockId(blockId: number): Uint8Array {
-        const aad = new Uint8Array(8);
-        new DataView(aad.buffer).setBigUint64(0, BigInt(blockId));
+        const aad = new Uint8Array(4);
+        new DataView(aad.buffer).setUint32(0, blockId);
         return aad;
     }
 

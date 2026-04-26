@@ -15,7 +15,7 @@ const PORT = 3000;
 /** Total number of `[N/STEP_COUNT]` log lines this script emits. Bump when adding a step. */
 const STEP_COUNT = 4;
 
-const LOCAL_FS_PATH = `${__dirname}/../../data`;
+const LOCAL_FS_PATH = `${import.meta.dirname}/../../data`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {

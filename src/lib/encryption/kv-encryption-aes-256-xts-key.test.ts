@@ -1,13 +1,7 @@
-import { describe, it, expect, beforeEach, IS_BUN } from 'test-globals';
+import { describe, it, expect, beforeEach } from 'test-globals';
 import { faker } from '@faker-js/faker';
 import { KvEncryptionAES256XTSKey } from './kv-encryption-aes-256-xts-key';
 import { KvError_Enc_Key } from '../utils';
-
-// Bun's crypto module doesn't ship `aes-256-xts`, so every test that
-// actually exercises encrypt/decrypt fails under bun even though XTS is
-// fine under Node. Skip the whole suite under bun rather than littering
-// individual `it.skip`s; the suite still runs in full under `npm test`.
-const describeMaybe = IS_BUN ? describe.skip : describe;
 
 const KEY_BYTES = 64;
 // XTS requires plaintexts of at least one AES block (16 bytes).
@@ -31,7 +25,7 @@ function pattern(length: number, seed = 0): Uint8Array {
     return out;
 }
 
-describeMaybe('KvEncryptionAES256XTSKey', () => {
+describe('KvEncryptionAES256XTSKey', () => {
     let xts: KvEncryptionAES256XTSKey;
     let blockId: number;
 
@@ -59,10 +53,17 @@ describeMaybe('KvEncryptionAES256XTSKey', () => {
         });
 
         it('produces ciphertext exactly the same length as plaintext', async () => {
-            for (const length of [16, 17, 32, 256, 4096]) {
+            // Inputs must be a multiple of the AES block size (16 B);
+            // see KvEncryptionAES256XTSKey docs (no ciphertext stealing).
+            for (const length of [16, 32, 256, 4096]) {
                 const ciphertext = await xts.encrypt(blockId, pattern(length));
                 expect(ciphertext.length).toBe(length);
             }
+        });
+
+        it('rejects non-aligned input lengths', async () => {
+            await expect(xts.encrypt(blockId, pattern(17))).rejects.toBeInstanceOf(KvError_Enc_Key);
+            await expect(xts.encrypt(blockId, pattern(15))).rejects.toBeInstanceOf(KvError_Enc_Key);
         });
     });
 
@@ -85,8 +86,10 @@ describeMaybe('KvEncryptionAES256XTSKey', () => {
             expect(Array.from(decrypted)).toEqual(Array.from(plaintext));
         });
 
-        it('decrypts what encrypt produced (random binary content)', async () => {
-            const plaintext = new Uint8Array(faker.number.int({ min: MIN_PLAINTEXT_BYTES, max: 8192 }));
+        it('decrypts what encrypt produced (random binary content, 16-byte aligned)', async () => {
+            // Round to a multiple of the AES block size (16 B).
+            const blocks = faker.number.int({ min: 1, max: 512 });
+            const plaintext = new Uint8Array(blocks * MIN_PLAINTEXT_BYTES);
             for (let i = 0; i < plaintext.length; i++) {
                 plaintext[i] = faker.number.int({ min: 0, max: 255 });
             }

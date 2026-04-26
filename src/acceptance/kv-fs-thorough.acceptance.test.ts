@@ -24,9 +24,9 @@ async function makeFs(opts: FsOptions = {}): Promise<{
     const raw = new KvBlockDeviceMemory(blockSize, blockSize * blocks);
     const device = opts.encrypted
         ? new KvEncryptedBlockDevice(
-            raw,
-            new KvEncryptionAES256GCMKey(KvEncryptionAES256GCMKey.generateRandomKey()),
-        )
+                raw,
+                new KvEncryptionAES256GCMKey(KvEncryptionAES256GCMKey.generateRandomKey()),
+            )
         : raw;
 
     await KvFilesystem.format(device, inodes);

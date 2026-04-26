@@ -59,29 +59,55 @@ export class KvFilesystem {
     }
 
     /**
-     * Read bytes out of `file` without touching its position cursor.
-     * `start` defaults to `0`; `length` defaults to "as many bytes as
-     * remain after `start`" — `KvINodeFile.readPartial` caps at EOF
-     * so passing a length larger than the file yields the bytes that
-     * are actually there. Reading past EOF returns an empty buffer.
+     * Read bytes out of `file`, **advancing the file's position cursor**
+     * by the number of bytes returned (POSIX `read(2)` shape, not
+     * `pread`).
+     *
+     * - `start` is optional. When provided, the cursor is moved there
+     *   first (capped at EOF — reads never extend the file). When
+     *   omitted, the read continues from wherever the cursor currently
+     *   sits, which is what a sequential reader (or a FUSE binding
+     *   doing offset-explicit calls) wants.
+     * - `length` is optional. When omitted, reads to EOF.
+     *
+     * Reading past EOF returns an empty buffer; the cursor lands at
+     * EOF in that case.
      */
     @Init
     public async read(
         file: KvINodeFile,
-        start = 0,
-        length: number = Number.MAX_SAFE_INTEGER,
+        start?: number,
+        length?: number,
     ): Promise<Uint8Array> {
-        return await file.readPartial(start, length);
+        // Force the file's @Init to fire so `file.size` reflects the
+        // on-disk inode before we possibly seek relative to it. Cheap —
+        // readPartial with a zero-length range short-circuits without
+        // any block I/O.
+        await file.readPartial(0, 0);
+        if (start !== undefined) {
+            // Cap at EOF so seeking past it stays read-only.
+            // setPos(file.size) is fine; setPos(>file.size) would
+            // extend the file with zero-fill, which is `pwrite`
+            // behaviour and wrong for a read.
+            await file.setPos(Math.min(start, file.size));
+        }
+        return await file.read(length);
     }
 
     /**
-     * Write `data` into `file` according to `mode` (see {@link KvWriteMode}).
-     * `offset` is only consulted when `mode === 'partial'` and defaults
-     * to `0`.
+     * Write `data` into `file` according to `mode`
+     * (see {@link KvWriteMode}). The cursor is **moved before the
+     * write and advanced by `data.length`** — so subsequent reads /
+     * writes pick up where this call left off (POSIX `write(2)` shape,
+     * not `pwrite`).
      *
-     * The file's position cursor is **not** touched — these are
-     * stateless, POSIX-`pwrite`-style writes. Append mode reads
-     * `file.size` and writes there; the file grows by `data.length`.
+     * - `'truncate'` (default) — clears the file, writes from offset 0;
+     *   cursor lands at `data.length`.
+     * - `'append'` — seeks to `file.size`, then writes; cursor lands at
+     *   the new EOF.
+     * - `'partial'` — seeks to `offset` (default 0), then writes; cursor
+     *   lands at `offset + data.length`. If `offset > file.size` the
+     *   gap is zero-filled (matches POSIX `pwrite` past-EOF semantics).
      */
     @Init
     public async write(
@@ -90,22 +116,24 @@ export class KvFilesystem {
         mode: KvWriteMode = 'truncate',
         offset = 0,
     ): Promise<void> {
-        // Force the file's @Init to fire so `file.size` reflects the
-        // on-disk inode before `'append'` reads it. Cheap — readPartial
-        // with a zero-length range short-circuits without any block I/O.
+        // Force @Init so `file.size` is current before 'append' reads it.
         await file.readPartial(0, 0);
 
         switch (mode) {
             case 'truncate':
+                // truncate(0) doesn't reset the cursor — explicitly seek
+                // to 0 so the subsequent write lands at the start.
                 await file.truncate(0);
-                await file.writePartial(0, data);
-                return;
+                await file.setPos(0);
+                break;
             case 'append':
-                await file.writePartial(file.size, data);
-                return;
+                await file.setPos(file.size);
+                break;
             case 'partial':
-                await file.writePartial(offset, data);
+                await file.setPos(offset);
+                break;
         }
+        await file.write(data);
     }
 
     /** Remove a file from `directory` and free all of its data blocks. */

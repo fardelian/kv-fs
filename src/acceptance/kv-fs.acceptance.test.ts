@@ -12,181 +12,259 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 /**
- * One very long acceptance test that exercises every public surface of
- * `KvFilesystem` in a single coherent flow — format → directories →
- * files → byte-addressable read/write (with every write mode) →
- * rename → recursive removal → final cleanup. The goal is to keep the
- * full feature matrix in one readable narrative; finer-grained
- * isolated tests live next to each implementation file.
+ * One long, narrative acceptance test for `KvFilesystem`. The flow
+ * mirrors how a real user would treat a freshly-formatted volume:
+ *
+ *   /
+ *   ├── TODO.md          (file at depth 0)
+ *   ├── notes.txt        (file at depth 0)
+ *   ├── docs/
+ *   │   └── manual.bin   (multi-block file at depth 1)
+ *   ├── tmp/
+ *   │   └── scratch-N.txt × 30  (chained-directory exercise)
+ *   └── projects/
+ *       ├── README.md    (file at depth 1)
+ *       ├── alpha/
+ *       │   ├── main.ts         (file at depth 2)
+ *       │   └── lib/
+ *       │       ├── utils.ts    (file at depth 3)
+ *       │       └── types.ts    (file at depth 3)
+ *       └── beta/
+ *           └── main.ts         (file at depth 2)
+ *
+ * Each operation gets exercised across this tree at multiple depths,
+ * and we check both the technical surface (cursor advances, partial
+ * ranges, mode semantics, error types) and the user's view (write a
+ * file, edit it, move it, refactor the tree, tear it down).
  */
 describe('kv-filesystem (acceptance)', () => {
-    it('exercises every public feature of KvFilesystem in one long flow', async () => {
-        // ---- format edge cases ----
+    it('walks a realistic workspace: create → edit → refactor → cleanup', async () => {
+        // ---- 1. Format edge cases ----
         {
             const tinyDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * 4);
-            await expect(KvFilesystem.format(tinyDevice, 0)).rejects.toBeInstanceOf(RangeError);
-            await expect(KvFilesystem.format(tinyDevice, 1000)).rejects.toBeInstanceOf(RangeError);
+            await expect(KvFilesystem.format(tinyDevice, 0)).rejects.toThrowError(RangeError);
+            await expect(KvFilesystem.format(tinyDevice, 1000)).rejects.toThrowError(RangeError);
         }
 
-        // ---- format + open ----
+        // ---- 2. Format + open a real volume ----
         const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
         await KvFilesystem.format(blockDevice, TOTAL_INODES);
         const fs = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
-
-        // ---- root directory is reachable and starts empty ----
         const root = await fs.getRootDirectory();
         const rootAgain = await fs.getRootDirectory();
         expect(rootAgain.id).toBe(root.id);
         expect((await root.read()).size).toBe(0);
 
-        // ---- createDirectory + getDirectory ----
+        // ---- 3. Files in the root directory ----
+        const todo = await fs.createFile('TODO.md', root);
+        const notes = await fs.createFile('notes.txt', root);
+        await fs.write(todo, enc.encode('# Things to do\n- write code\n'));
+        // truncate-mode write left the cursor at end-of-data.
+        expect(todo.getPos()).toBe('# Things to do\n- write code\n'.length);
+        await fs.write(notes, enc.encode('quick scratch'));
+
+        // ---- 4. Reading from the start (explicit start = 0) ----
+        expect(dec.decode(await fs.read(todo, 0))).toBe('# Things to do\n- write code\n');
+        // After the read, cursor is at EOF.
+        expect(todo.getPos()).toBe('# Things to do\n- write code\n'.length);
+
+        // ---- 5. Cursor-aware sequential reads ----
+        // '# Things to do\n- write code\n' — read 5 bytes from offset 0,
+        // then continue another 7 from wherever the cursor lands.
+        await fs.read(todo, 0, 5);
+        expect(todo.getPos()).toBe(5);
+        const next7 = await fs.read(todo, undefined, 7); // bytes 5..11
+        expect(dec.decode(next7)).toBe('ngs to ');
+        expect(todo.getPos()).toBe(12);
+
+        // ---- 6. Subdirectories of root ----
+        const docs = await fs.createDirectory('docs', root);
+        const tmp = await fs.createDirectory('tmp', root);
         const projects = await fs.createDirectory('projects', root);
+
+        // ---- 7. File at depth 1: docs/manual.bin (spans multiple blocks) ----
+        const manual = await fs.createFile('manual.bin', docs);
+        const manualPayload = new Uint8Array(BLOCK_SIZE * 2 + 100);
+        for (let i = 0; i < manualPayload.length; i++) manualPayload[i] = i & 0xff;
+        await fs.write(manual, manualPayload);
+
+        // Whole-file readback after seeking to 0.
+        const manualBack = await fs.read(manual, 0);
+        expect(manualBack.length).toBe(manualPayload.length);
+        expect(Array.from(manualBack.subarray(0, 16)))
+            .toEqual(Array.from(manualPayload.subarray(0, 16)));
+
+        // Partial read straddling the first block boundary.
+        const sliceMid = await fs.read(manual, BLOCK_SIZE - 4, 8);
+        expect(sliceMid.length).toBe(8);
+        for (let i = 0; i < 8; i++) {
+            expect(sliceMid[i]).toBe((BLOCK_SIZE - 4 + i) & 0xff);
+        }
+        // Cursor lands at start + bytes read.
+        expect(manual.getPos()).toBe(BLOCK_SIZE - 4 + 8);
+
+        // ---- 8. File at depth 1: projects/README.md ----
+        const readme = await fs.createFile('README.md', projects);
+        await fs.write(readme, enc.encode('# My Projects\n'));
+
+        // ---- 9. Directories at depth 2: projects/alpha + projects/beta ----
         const alpha = await fs.createDirectory('alpha', projects);
         const beta = await fs.createDirectory('beta', projects);
-        const docs = await fs.createDirectory('docs', root);
 
-        const projectsAgain = await fs.getDirectory('projects', root);
-        expect(projectsAgain.id).toBe(projects.id);
-        await expect(fs.getDirectory('missing', root)).rejects.toBeInstanceOf(KvError_FS_NotFound);
+        // Files at depth 2.
+        const alphaMain = await fs.createFile('main.ts', alpha);
+        await fs.write(alphaMain, enc.encode('console.log("alpha");'));
+        const betaMain = await fs.createFile('main.ts', beta);
+        await fs.write(betaMain, enc.encode('console.log("beta");'));
 
-        // ---- createFile + getKvFile ----
-        const note = await fs.createFile('note.txt', alpha);
-        await fs.createFile('greet.txt', alpha);
-        const huge = await fs.createFile('huge.bin', beta);
+        // ---- 10. Directory at depth 3 + files inside it ----
+        const alphaLib = await fs.createDirectory('lib', alpha);
+        const utils = await fs.createFile('utils.ts', alphaLib);
+        const types = await fs.createFile('types.ts', alphaLib);
+        await fs.write(utils, enc.encode('export const VERSION = "1.0";'));
+        await fs.write(types, enc.encode('export type Foo = string;'));
 
-        const noteAgain = await fs.getKvFile('note.txt', alpha);
-        expect(noteAgain.id).toBe(note.id);
-        await expect(fs.getKvFile('missing.txt', alpha)).rejects.toBeInstanceOf(KvError_FS_NotFound);
+        // ---- 11. Walk the tree by name to reach the depth-3 file ----
+        {
+            const projectsAgain = await fs.getDirectory('projects', root);
+            const alphaAgain = await fs.getDirectory('alpha', projectsAgain);
+            const libAgain = await fs.getDirectory('lib', alphaAgain);
+            const utilsAgain = await fs.getKvFile('utils.ts', libAgain);
+            expect(utilsAgain.id).toBe(utils.id);
+            expect(dec.decode(await fs.read(utilsAgain, 0))).toBe('export const VERSION = "1.0";');
+        }
 
-        // ---- write 'truncate' (default) — clears the file, writes from 0 ----
-        await fs.write(note, enc.encode('hello world'));
-        expect(dec.decode(await fs.read(note))).toBe('hello world');
+        // ---- 12. tmp/ holds enough files to force directory chaining ----
+        const FILE_COUNT = 30;
+        for (let i = 0; i < FILE_COUNT; i++) {
+            const f = await fs.createFile(`scratch-${String(i).padStart(2, '0')}.txt`, tmp);
+            await fs.write(f, enc.encode(`scratch ${i}`));
+        }
+        expect((await tmp.read()).size).toBe(FILE_COUNT);
+        // Spot-check a file fetched fresh.
+        const spot = await fs.getKvFile('scratch-17.txt', tmp);
+        expect(dec.decode(await fs.read(spot, 0))).toBe('scratch 17');
 
-        // ---- read partial: explicit start ----
-        expect(dec.decode(await fs.read(note, 6))).toBe('world');
+        // ---- 13. Write modes against a small file ----
+        // 'truncate' (default) wipes the existing content and writes at 0.
+        await fs.write(notes, enc.encode('a'));
+        expect(dec.decode(await fs.read(notes, 0))).toBe('a');
+        expect(notes.getPos()).toBe(1);
 
-        // ---- read partial: start + length ----
-        expect(dec.decode(await fs.read(note, 0, 5))).toBe('hello');
+        // 'append' grows the file at EOF; cursor lands at the new EOF.
+        await fs.write(notes, enc.encode('b'), 'append');
+        await fs.write(notes, enc.encode('c'), 'append');
+        expect(dec.decode(await fs.read(notes, 0))).toBe('abc');
+        expect(notes.getPos()).toBe(3);
 
-        // ---- read past EOF returns empty ----
-        expect((await fs.read(note, 100)).length).toBe(0);
+        // 'partial' overwrites in place; cursor lands at offset + data.length.
+        await fs.write(notes, enc.encode('Z'), 'partial', 1);
+        expect(notes.getPos()).toBe(2);
+        expect(dec.decode(await fs.read(notes, 0))).toBe('aZc');
 
-        // ---- read length larger than file yields the available tail (no extension) ----
-        expect(dec.decode(await fs.read(note, 6, 9999))).toBe('world');
+        // 'partial' past EOF zero-fills the gap and grows the file.
+        await fs.write(notes, enc.encode('!'), 'partial', 6);
+        expect(notes.getPos()).toBe(7);
+        const grown = await fs.read(notes, 0);
+        expect(grown.length).toBe(7);
+        expect(grown[3]).toBe(0); // zero-filled gap
+        expect(grown[4]).toBe(0);
+        expect(grown[5]).toBe(0);
+        expect(grown[6]).toBe('!'.charCodeAt(0));
 
-        // ---- write 'append' grows the file at EOF ----
-        await fs.write(note, enc.encode('!!'), 'append');
-        expect(dec.decode(await fs.read(note))).toBe('hello world!!');
-
-        // ---- write 'partial' overwrites in place without growing ----
-        await fs.write(note, enc.encode('HELLO'), 'partial', 0);
-        expect(dec.decode(await fs.read(note))).toBe('HELLO world!!');
-
-        // ---- write 'partial' past EOF grows the file with a zero-filled gap ----
-        await fs.write(note, enc.encode('++'), 'partial', 15);
-        const grown = await fs.read(note);
-        expect(grown.length).toBe(17);
-        expect(grown[13]).toBe(0); // zero-fill between old EOF and new offset
-        expect(grown[14]).toBe(0);
-        expect(grown[15]).toBe('+'.charCodeAt(0));
-        expect(grown[16]).toBe('+'.charCodeAt(0));
-
-        // ---- write 'truncate' wipes the existing content ----
-        await fs.write(note, enc.encode('fresh start'));
-        expect(dec.decode(await fs.read(note))).toBe('fresh start');
-
-        // ---- multi-block file: payload spanning > 3 blocks ----
-        const bigSize = BLOCK_SIZE * 3 + 100;
-        const bigPayload = new Uint8Array(bigSize);
-        for (let i = 0; i < bigSize; i++) bigPayload[i] = i & 0xff;
-        await fs.write(huge, bigPayload);
-
-        const bigBack = await fs.read(huge);
-        expect(bigBack.length).toBe(bigSize);
-        expect(Array.from(bigBack.subarray(0, 16))).toEqual(Array.from(bigPayload.subarray(0, 16)));
-        // Cross-block boundary at position BLOCK_SIZE.
-        expect(Array.from(bigBack.subarray(BLOCK_SIZE - 8, BLOCK_SIZE + 8)))
-            .toEqual(Array.from(bigPayload.subarray(BLOCK_SIZE - 8, BLOCK_SIZE + 8)));
-
-        // ---- partial read straddling a block boundary ----
-        const sliceMid = await fs.read(huge, BLOCK_SIZE + 100, 200);
-        expect(sliceMid.length).toBe(200);
-        expect(sliceMid[0]).toBe((BLOCK_SIZE + 100) & 0xff);
-
-        // ---- partial write that crosses a block boundary ----
+        // ---- 14. Partial write that crosses a block boundary in a multi-block file ----
         const patch = new Uint8Array([0xab, 0xcd, 0xef]);
-        await fs.write(huge, patch, 'partial', BLOCK_SIZE - 1);
-        const huge2 = await fs.read(huge);
-        expect(huge2[BLOCK_SIZE - 1]).toBe(0xab);
-        expect(huge2[BLOCK_SIZE]).toBe(0xcd);
-        expect(huge2[BLOCK_SIZE + 1]).toBe(0xef);
+        await fs.write(manual, patch, 'partial', BLOCK_SIZE - 1);
+        const manual2 = await fs.read(manual, 0);
+        expect(manual2[BLOCK_SIZE - 1]).toBe(0xab);
+        expect(manual2[BLOCK_SIZE]).toBe(0xcd);
+        expect(manual2[BLOCK_SIZE + 1]).toBe(0xef);
 
-        // ---- append onto a multi-block file ----
-        const tail = enc.encode('TAIL');
-        const sizeBefore = huge2.length;
-        await fs.write(huge, tail, 'append');
-        const huge3 = await fs.read(huge);
-        expect(huge3.length).toBe(sizeBefore + tail.length);
-        expect(dec.decode(huge3.subarray(sizeBefore))).toBe('TAIL');
+        // 'append' onto the multi-block file extends it.
+        const sizeBefore = manual.size;
+        await fs.write(manual, enc.encode('TAIL'), 'append');
+        expect(manual.size).toBe(sizeBefore + 4);
+        const manual3 = await fs.read(manual, 0);
+        expect(dec.decode(manual3.subarray(sizeBefore))).toBe('TAIL');
 
-        // ---- rename within the same directory ----
-        await fs.rename('note.txt', alpha, 'README.md', alpha);
-        expect(await alpha.hasEntry('note.txt')).toBe(false);
-        expect(await alpha.hasEntry('README.md')).toBe(true);
+        // ---- 15. Refactor: rename a depth-3 file in-place ----
+        await fs.rename('utils.ts', alphaLib, 'helpers.ts', alphaLib);
+        expect(await alphaLib.hasEntry('utils.ts')).toBe(false);
+        expect(await alphaLib.hasEntry('helpers.ts')).toBe(true);
+        // The bytes are still reachable through the new name.
+        const helpers = await fs.getKvFile('helpers.ts', alphaLib);
+        expect(dec.decode(await fs.read(helpers, 0))).toBe('export const VERSION = "1.0";');
 
-        // ---- rename across directories preserves the file's bytes ----
-        await fs.rename('README.md', alpha, 'README.md', docs);
-        const renamedReadme = await fs.getKvFile('README.md', docs);
-        expect(dec.decode(await fs.read(renamedReadme))).toBe('fresh start');
+        // ---- 16. Refactor: move a depth-3 file up to depth 2 ----
+        await fs.rename('helpers.ts', alphaLib, 'helpers.ts', alpha);
+        expect(await alphaLib.hasEntry('helpers.ts')).toBe(false);
+        expect(await alpha.hasEntry('helpers.ts')).toBe(true);
 
-        // ---- rename refuses to overwrite an existing destination ----
-        await fs.createFile('blocker.txt', docs);
-        await expect(fs.rename('README.md', docs, 'blocker.txt', docs))
+        // ---- 17. Refactor: rename a directory at depth 2 ----
+        await fs.rename('beta', projects, 'gamma', projects);
+        expect(await projects.hasEntry('beta')).toBe(false);
+        expect(await projects.hasEntry('gamma')).toBe(true);
+        // The file inside the renamed directory is reachable via the new path.
+        const gamma = await fs.getDirectory('gamma', projects);
+        const gammaMain = await fs.getKvFile('main.ts', gamma);
+        expect(dec.decode(await fs.read(gammaMain, 0))).toBe('console.log("beta");');
+
+        // ---- 18. Rename refuses to overwrite a destination that already exists ----
+        // Both alpha and gamma now contain `main.ts`; renaming one onto the other should fail.
+        await expect(fs.rename('main.ts', alpha, 'main.ts', gamma))
             .rejects.toBeInstanceOf(KvError_FS_Exists);
+        // Both sides are intact.
+        expect(await alpha.hasEntry('main.ts')).toBe(true);
+        expect(await gamma.hasEntry('main.ts')).toBe(true);
 
-        // ---- rename: same parent, same name is a no-op ----
-        await fs.rename('README.md', docs, 'README.md', docs);
-        expect(await docs.hasEntry('README.md')).toBe(true);
+        // ---- 19. Same-parent same-name rename is a documented no-op ----
+        await fs.rename('main.ts', alpha, 'main.ts', alpha);
+        expect(await alpha.hasEntry('main.ts')).toBe(true);
 
-        // ---- rename: missing source throws not-found ----
-        await expect(fs.rename('ghost.txt', docs, 'wherever.txt', docs))
+        // ---- 20. Missing-source rename throws not-found ----
+        await expect(fs.rename('ghost.txt', root, 'wherever.txt', root))
             .rejects.toBeInstanceOf(KvError_FS_NotFound);
 
-        // ---- removeFile ----
-        await fs.removeFile('greet.txt', alpha);
-        await fs.removeFile('blocker.txt', docs);
-        await expect(fs.removeFile('greet.txt', alpha)).rejects.toBeInstanceOf(KvError_FS_NotFound);
+        // ---- 21. removeFile against missing file throws not-found ----
+        await expect(fs.removeFile('does-not-exist.txt', root))
+            .rejects.toBeInstanceOf(KvError_FS_NotFound);
 
-        // ---- removeDirectory non-recursive: rejects non-empty ----
-        await expect(fs.removeDirectory('beta', projects))
+        // ---- 22. removeDirectory non-recursive: rejects non-empty ----
+        await expect(fs.removeDirectory('projects', root))
             .rejects.toBeInstanceOf(KvError_FS_NotEmpty);
 
-        // ---- removeDirectory recursive: clears the subtree ----
-        // Nest one deeper inside beta for the recursive walk to chew on.
-        const inner = await fs.createDirectory('inner', beta);
-        const innerNote = await fs.createFile('innerNote.txt', inner);
-        await fs.write(innerNote, enc.encode('disposable'));
-        await fs.removeDirectory('beta', projects, true);
-        expect(await projects.hasEntry('beta')).toBe(false);
+        // ---- 23. removeDirectory recursive on a deep tree (covers depth-3 walk) ----
+        await fs.removeDirectory('projects', root, true);
+        expect(await root.hasEntry('projects')).toBe(false);
 
-        // ---- removeDirectory non-existent path ----
-        await expect(fs.removeDirectory('beta', projects))
-            .rejects.toBeInstanceOf(KvError_FS_NotFound);
+        // ---- 24. Tear down the chained `tmp` directory file-by-file ----
+        for (let i = 0; i < FILE_COUNT; i++) {
+            await fs.removeFile(`scratch-${String(i).padStart(2, '0')}.txt`, tmp);
+        }
+        expect((await tmp.read()).size).toBe(0);
+        await fs.removeDirectory('tmp', root);
 
-        // ---- final cleanup: tear the whole tree down through the public API ----
-        await fs.removeDirectory('alpha', projects);
-        await fs.removeDirectory('projects', root);
-        await fs.removeFile('huge.bin', beta).catch(() => undefined); // beta already gone via recursive
-        await fs.removeFile('README.md', docs);
+        // ---- 25. Final cleanup of the remaining root entries ----
+        await fs.removeFile('TODO.md', root);
+        await fs.removeFile('notes.txt', root);
+        await fs.removeFile('manual.bin', docs);
         await fs.removeDirectory('docs', root);
         expect((await root.read()).size).toBe(0);
 
-        // ---- after format(), the device drops every block ----
-        const beforeReformat = await blockDevice.getHighestBlockId();
-        expect(beforeReformat).toBeGreaterThanOrEqual(0);
+        // ---- 26. Volume can be reformatted and re-opened cleanly ----
         await KvFilesystem.format(blockDevice, TOTAL_INODES);
         const reopened = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
         const reopenedRoot = await reopened.getRootDirectory();
         expect((await reopenedRoot.read()).size).toBe(0);
+
+        // Avoid an unused-binding warning — `betaMain` was useful as a
+        // reference earlier (its rename target moved when `beta` →
+        // `gamma`).
+        expect(betaMain.id).toBeGreaterThan(0);
+        // Likewise `alphaMain` and `types` are exercised through the
+        // recursive directory walk in step 23 (they get freed there).
+        expect(alphaMain.id).toBeGreaterThan(0);
+        expect(types.id).toBeGreaterThan(0);
+        expect(readme.id).toBeGreaterThan(0);
     });
 });

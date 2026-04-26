@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
-import { KvBlockDeviceMemory } from '../kv-block-device-memory';
+import { KvBlockDeviceMemory } from '../kv-block-device-memory/kv-block-device-memory';
 
 // Small block size and a handful of blocks — enough to test boundary
 // behaviour without making the test inputs huge.

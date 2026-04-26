@@ -13,13 +13,13 @@ It is a pet project. It is almost certainly full of bugs. Do not trust it with a
     - [`KvBlockDeviceSqlite3`](src/lib/block-devices/kv-block-device-sqlite3.ts): one row per block in a SQLite database.
     - [`KvBlockDeviceHttpClient`](src/lib/block-devices/kv-block-device-http-client.ts) + [`KvBlockDeviceHttpRouter`](src/lib/block-devices/kv-block-device-http-router.ts): talk to a remote block device over a small HTTP API.
 - [**`KvEncryptedBlockDevice`**](src/lib/block-devices/kv-encrypted-block-device.ts) — a decorator that wraps any block device with transparent encryption. Pair it with one of:
-    - [`KvEncryptionAES256GCMKey`](src/lib/encryption/kv-encryption-aes-256-gcm-key.ts) — AEAD (authenticated encryption). Fresh 12-byte nonce per write, 16-byte auth tag, block ID mixed in as additional authenticated data; tampering is detected on read. Adds 28 bytes of overhead per block. The recommended cipher for zero-knowledge storage.
-    - [`KvEncryptionAES256XTSKey`](src/lib/encryption/kv-encryption-aes-256-xts-key.ts) — length-preserving (no padding, no stored IV); the block ID is used as the XTS tweak. Unauthenticated — bit-flips go undetected; pair with a separate integrity layer if you need that.
-    - [`KvEncryptionAES256CBCKey`](src/lib/encryption/kv-encryption-aes-256-cbc-key.ts) — random IV stored with each block, PKCS#7 padding. Adds 32 bytes of overhead per block.
-    - [`KvEncryptionPassword`](src/lib/encryption/kv-encryption-password.ts) — derives an AES-256-CBC key from a password via PBKDF2.
-    - [`KvEncryptionRot13`](src/lib/encryption/kv-encryption-rot13.ts) — for entertainment value (don't @ me).
-- [**`KvFilesystem`**](src/lib/filesystem/kv-filesystem.ts) — superblock, inodes ([file](src/lib/inode/kv-inode-file.ts) + [directory](src/lib/inode/kv-inode-directory.ts)), block allocation, format. Layered on top of any block device.
-- [**`KvFilesystemSimple`**](src/lib/filesystem/kv-filesystem-simple.ts) — path-style helpers (`createFile('/home/florin/note.txt')`, `readDirectory('/')`) so callers don't have to thread inodes around.
+    - [`KvEncryptionAES256GCMKey`](src/lib/encryption/kv-encryption-aes-256-gcm-key/kv-encryption-aes-256-gcm-key.ts) — AEAD (authenticated encryption). Fresh 12-byte nonce per write, 16-byte auth tag, block ID mixed in as additional authenticated data; tampering is detected on read. Adds 28 bytes of overhead per block. The recommended cipher for zero-knowledge storage.
+    - [`KvEncryptionAES256XTSKey`](src/lib/encryption/kv-encryption-aes-256-xts-key/kv-encryption-aes-256-xts-key.ts) — length-preserving (no padding, no stored IV); the block ID is used as the XTS tweak. Unauthenticated — bit-flips go undetected; pair with a separate integrity layer if you need that.
+    - [`KvEncryptionAES256CBCKey`](src/lib/encryption/kv-encryption-aes-256-cbc-key/kv-encryption-aes-256-cbc-key.ts) — random IV stored with each block, PKCS#7 padding. Adds 32 bytes of overhead per block.
+    - [`KvEncryptionPassword`](src/lib/encryption/kv-encryption-password/kv-encryption-password.ts) — derives an AES-256-CBC key from a password via PBKDF2.
+    - [`KvEncryptionRot13`](src/lib/encryption/kv-encryption-rot13/kv-encryption-rot13.ts) — for entertainment value (don't @ me).
+- [**`KvFilesystem`**](src/lib/filesystem/kv-filesystem/kv-filesystem.ts) — superblock, inodes ([file](src/lib/inode/kv-inode-file/kv-inode-file.ts) + [directory](src/lib/inode/kv-inode-directory/kv-inode-directory.ts)), block allocation, format. Layered on top of any block device.
+- [**`KvFilesystemSimple`**](src/lib/filesystem/kv-filesystem-simple/kv-filesystem-simple.ts) — path-style helpers (`createFile('/home/florin/note.txt')`, `readDirectory('/')`) so callers don't have to thread inodes around.
 
 ## How it works
 
@@ -117,7 +117,7 @@ That's the whole model. Reading a directory means reading its inode block and fo
 
 ### Files have a position
 
-[`KvINodeFile`](src/lib/inode/kv-inode-file.ts) keeps a current read/write position, like an open `FILE *` in C. The shape is loosely modeled on POSIX:
+[`KvINodeFile`](src/lib/inode/kv-inode-file/kv-inode-file.ts) keeps a current read/write position, like an open `FILE *` in C. The shape is loosely modeled on POSIX:
 
 - `getPos()` — current offset, in bytes from the start. (`ftell` analogue.)
 - `setPos(n)` — move the offset. Setting it past EOF **extends** the file with zero bytes (POSIX `lseek` doesn't extend; this method does, by design).

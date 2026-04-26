@@ -13,7 +13,8 @@ It is a pet project. It is almost certainly full of bugs. Do not trust it with a
     - [`KvBlockDeviceSqlite3`](src/lib/block-devices/kv-block-device-sqlite3.ts): one row per block in a SQLite database.
     - [`KvBlockDeviceHttpClient`](src/lib/block-devices/kv-block-device-http-client.ts) + [`KvBlockDeviceHttpRouter`](src/lib/block-devices/kv-block-device-http-router.ts): talk to a remote block device over a small HTTP API.
 - [**`KvEncryptedBlockDevice`**](src/lib/block-devices/kv-encrypted-block-device.ts) — a decorator that wraps any block device with transparent encryption. Pair it with one of:
-    - [`KvEncryptionAES256XTSKey`](src/lib/encryption/kv-encryption-aes-256-xts-key.ts) — length-preserving (no padding, no stored IV); the block ID is used as the XTS tweak. The "real" disk-encryption mode.
+    - [`KvEncryptionAES256GCMKey`](src/lib/encryption/kv-encryption-aes-256-gcm-key.ts) — AEAD (authenticated encryption). Fresh 12-byte nonce per write, 16-byte auth tag, block ID mixed in as additional authenticated data; tampering is detected on read. Adds 28 bytes of overhead per block. The recommended cipher for zero-knowledge storage.
+    - [`KvEncryptionAES256XTSKey`](src/lib/encryption/kv-encryption-aes-256-xts-key.ts) — length-preserving (no padding, no stored IV); the block ID is used as the XTS tweak. Unauthenticated — bit-flips go undetected; pair with a separate integrity layer if you need that.
     - [`KvEncryptionAES256CBCKey`](src/lib/encryption/kv-encryption-aes-256-cbc-key.ts) — random IV stored with each block, PKCS#7 padding. Adds 32 bytes of overhead per block.
     - [`KvEncryptionPassword`](src/lib/encryption/kv-encryption-password.ts) — derives an AES-256-CBC key from a password via PBKDF2.
     - [`KvEncryptionRot13`](src/lib/encryption/kv-encryption-rot13.ts) — for entertainment value (don't @ me).
@@ -80,14 +81,14 @@ The filesystem writes a directory entry → the encryption layer wraps the bytes
 Some ciphers add bytes (a stored IV, padding, an auth tag); others don't. The `KvEncryption` contract makes that explicit:
 
 ```ts
-abstract class KvEncryption {
-    abstract get overheadBytes(): number;
-    abstract encrypt(blockId: number, data: Uint8Array): Promise<Uint8Array>;
-    abstract decrypt(blockId: number, data: Uint8Array): Promise<Uint8Array>;
+interface KvEncryption {
+    readonly overheadBytes: number;
+    encrypt(blockId: number, data: Uint8Array): Promise<Uint8Array>;
+    decrypt(blockId: number, data: Uint8Array): Promise<Uint8Array>;
 }
 ```
 
-`KvEncryptedBlockDevice` reads `overheadBytes` from its cipher and exposes a block size of `wrapped.blockSize - overheadBytes` to the filesystem. So a full encrypted block (plaintext + IV + padding) fits exactly into one underlying block, regardless of the scheme.
+`KvEncryptedBlockDevice` reads `overheadBytes` from its cipher and exposes a block size of `wrapped.blockSize - overheadBytes` to the filesystem. So a full encrypted block (plaintext + IV + tag + padding) fits exactly into one underlying block, regardless of the scheme.
 
 Concrete numbers for the schemes shipped here:
 
@@ -95,6 +96,7 @@ Concrete numbers for the schemes shipped here:
 |---|---|---|
 | `KvEncryptionRot13` / Caesar | 0 | length-preserving by construction |
 | `KvEncryptionAES256XTSKey` | 0 | XTS uses the block ID as a tweak; no IV is stored, no padding is added |
+| `KvEncryptionAES256GCMKey` | 28 | 12-byte random nonce + 16-byte auth tag; AEAD with the block ID as additional authenticated data |
 | `KvEncryptionAES256CBCKey` / `KvEncryptionPassword` | 32 | 16-byte random IV + one full PKCS#7 padding block |
 
 The `blockId` argument is part of the unified API — tweakable schemes (XTS) use it as the per-block tweak; non-tweakable schemes (CBC, ROT13) ignore it. That keeps a single `encrypt(blockId, data)` shape for everyone, while still leaving room for length-preserving disk-encryption modes that *need* the block ID.

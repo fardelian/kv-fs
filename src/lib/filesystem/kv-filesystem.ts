@@ -1,5 +1,5 @@
 import { SuperBlock } from './kv-super-block';
-import { INodeId, KvINodeDirectory, KvINodeFile } from '../inode';
+import { INodeId, KV_INODE_KIND_DIRECTORY, KvINodeDirectory, KvINodeFile, readInodeKind } from '../inode';
 import { KvBlockDevice } from '../block-devices';
 import { Init, KvError_FS_Exists, KvError_FS_NotEmpty } from '../utils';
 
@@ -43,7 +43,7 @@ export class KvFilesystem {
 
     /** Remove a file from `directory` and free all of its data blocks. */
     @Init
-    public async unlink(name: string, directory: KvINodeDirectory): Promise<void> {
+    public async removeFile(name: string, directory: KvINodeDirectory): Promise<void> {
         const iNodeId = await directory.getEntry(name);
 
         await directory.removeEntry(name);
@@ -77,20 +77,51 @@ export class KvFilesystem {
     }
 
     /**
-     * Remove an empty subdirectory from `parent`. Throws
-     * `KvError_FS_NotEmpty` if the directory still contains entries —
-     * caller must clear it first (POSIX `rmdir` semantics).
+     * Remove a subdirectory from `parent`.
+     *
+     * - `recursive: false` (default): mirrors POSIX `rmdir` — throws
+     *   `KvError_FS_NotEmpty` if the directory still contains entries.
+     * - `recursive: true`: walks the subtree, freeing every file and
+     *   subdirectory before unlinking the target itself (akin to
+     *   `rm -r`).
      */
     @Init
-    public async removeDirectory(name: string, parent: KvINodeDirectory): Promise<void> {
+    public async removeDirectory(
+        name: string,
+        parent: KvINodeDirectory,
+        recursive = false,
+    ): Promise<void> {
         const inodeId = await parent.getEntry(name);
         const dir = new KvINodeDirectory(this.blockDevice, inodeId);
         const entries = await dir.read();
         if (entries.size > 0) {
-            throw new KvError_FS_NotEmpty(`Directory "${name}" is not empty (${entries.size} entries).`);
+            if (!recursive) {
+                throw new KvError_FS_NotEmpty(`Directory "${name}" is not empty (${entries.size} entries).`);
+            }
+            await this.removeChildren(dir);
         }
         await dir.unlink();
         await parent.removeEntry(name);
+    }
+
+    /**
+     * Free every entry under `dir` (depth-first), then leave `dir`
+     * itself empty for the caller to unlink. Used by the recursive
+     * branch of `removeDirectory`.
+     */
+    private async removeChildren(dir: KvINodeDirectory): Promise<void> {
+        const entries = await dir.read();
+        for (const childId of entries.values()) {
+            const kind = await readInodeKind(this.blockDevice, childId);
+            if (kind === KV_INODE_KIND_DIRECTORY) {
+                const childDir = new KvINodeDirectory(this.blockDevice, childId);
+                await this.removeChildren(childDir);
+                await childDir.unlink();
+            } else {
+                const file = new KvINodeFile(this.blockDevice, childId);
+                await file.unlink();
+            }
+        }
     }
 
     /**

@@ -95,15 +95,20 @@ export class KvFilesystemSimple {
 
     // Common operations
 
-    public async unlink(pathName: string): Promise<void> {
+    public async removeFile(pathName: string): Promise<void> {
         const { parent, leaf } = await this.resolveLeaf(pathName);
-        await this.filesystem.unlink(leaf, parent);
+        await this.filesystem.removeFile(leaf, parent);
     }
 
-    /** Remove an empty directory at `pathName`. Mirrors POSIX `rmdir`. */
-    public async removeDirectory(pathName: string): Promise<void> {
+    /**
+     * Remove a directory at `pathName`. With `recursive=false` (default)
+     * mirrors POSIX `rmdir` and throws `KvError_FS_NotEmpty` if the
+     * directory still contains entries; with `recursive=true` walks the
+     * whole subtree first (akin to `rm -r`).
+     */
+    public async removeDirectory(pathName: string, recursive = false): Promise<void> {
         const { parent, leaf } = await this.resolveLeaf(pathName);
-        await this.filesystem.removeDirectory(leaf, parent);
+        await this.filesystem.removeDirectory(leaf, parent, recursive);
     }
 
     /** Rename or move a file/directory from `fromPath` to `toPath`. */

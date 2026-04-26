@@ -65,6 +65,17 @@ export abstract class INode<DataType> {
 }
 
 /**
+ * Read just the kind byte from an inode block, without instantiating
+ * the wrong-typed wrapper. Useful when walking directory entries
+ * generically (e.g. recursive rmdir) and you need to dispatch on
+ * file-vs-directory before reading the rest.
+ */
+export async function readInodeKind(blockDevice: KvBlockDevice, id: INodeId): Promise<number> {
+    const buffer = await blockDevice.readBlock(id);
+    return dataView(buffer).getUint8(INode.OFFSET_KIND);
+}
+
+/**
  * Thrown when an inode block's stored `kind` byte doesn't match the
  * subclass trying to read it (e.g. `KvINodeFile` opened over what is
  * actually a directory). The easy-FS layer treats this as a not-found

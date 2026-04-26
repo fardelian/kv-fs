@@ -119,18 +119,18 @@ describe('KvFilesystemSimple', () => {
         });
     });
 
-    describe('unlink', () => {
+    describe('removeFile', () => {
         it('throws when the path has no leaf (root)', async () => {
             const fs = await makeFs();
 
-            await expect(fs.unlink('/')).rejects.toBeInstanceOf(KvError_FS_Exists);
+            await expect(fs.removeFile('/')).rejects.toBeInstanceOf(KvError_FS_Exists);
         });
 
         it('removes a file from its parent directory', async () => {
             const fs = await makeFs();
             await fs.createFile('/note.txt');
 
-            await fs.unlink('/note.txt');
+            await fs.removeFile('/note.txt');
 
             expect(await fs.readDirectory('/')).not.toContain('note.txt');
         });
@@ -154,7 +154,7 @@ describe('KvFilesystemSimple', () => {
             expect(await fs.readDirectory('/parent')).not.toContain('child');
         });
 
-        it('throws KvError_FS_NotEmpty when the directory still has entries', async () => {
+        it('throws KvError_FS_NotEmpty when the directory still has entries (recursive=false default)', async () => {
             const fs = await makeFs();
             await fs.createDirectory('/parent', true);
             await fs.createFile('/parent/note.txt');
@@ -166,6 +166,17 @@ describe('KvFilesystemSimple', () => {
             const fs = await makeFs();
 
             await expect(fs.removeDirectory('/missing')).rejects.toBeInstanceOf(KvError_FS_NotFound);
+        });
+
+        it('with recursive=true, deletes a non-empty directory and its contents', async () => {
+            const fs = await makeFs();
+            await fs.createDirectory('/tree/branch', true);
+            await fs.createFile('/tree/branch/leaf.txt');
+            await fs.createFile('/tree/sibling.txt');
+
+            await fs.removeDirectory('/tree', true);
+
+            expect(await fs.readDirectory('/')).not.toContain('tree');
         });
     });
 
@@ -206,6 +217,39 @@ describe('KvFilesystemSimple', () => {
             await fs.createFile('/b.txt');
 
             await expect(fs.rename('/a.txt', '/b.txt')).rejects.toBeInstanceOf(KvError_FS_Exists);
+        });
+
+        it('refuses to overwrite a destination directory and leaves both sides intact', async () => {
+            const fs = await makeFs();
+            const encoder = new TextEncoder();
+            const decoder = new TextDecoder();
+            await fs.createDirectory('/src', true);
+            const srcFile = await fs.createFile('/src/note.txt');
+            await srcFile.write(encoder.encode('source-bytes'));
+
+            await fs.createDirectory('/dst', true);
+            const dstFile = await fs.createFile('/dst/note.txt');
+            await dstFile.write(encoder.encode('dest-bytes'));
+
+            await expect(fs.rename('/src/note.txt', '/dst/note.txt'))
+                .rejects.toBeInstanceOf(KvError_FS_Exists);
+
+            // Both sides survive intact — no half-applied rename.
+            expect(decoder.decode(await fs.readFile('/src/note.txt'))).toBe('source-bytes');
+            expect(decoder.decode(await fs.readFile('/dst/note.txt'))).toBe('dest-bytes');
+        });
+
+        it('refuses to overwrite when the destination is a directory under the same parent', async () => {
+            const fs = await makeFs();
+            await fs.createFile('/file.txt');
+            await fs.createDirectory('/dir', true);
+
+            // Renaming a file over an existing directory entry must throw.
+            await expect(fs.rename('/file.txt', '/dir')).rejects.toBeInstanceOf(KvError_FS_Exists);
+
+            // Original entries unchanged.
+            expect(await fs.readDirectory('/')).toContain('file.txt');
+            expect(await fs.readDirectory('/')).toContain('dir');
         });
     });
 });

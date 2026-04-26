@@ -36,6 +36,25 @@ describe('KvFilesystem.format', () => {
     });
 });
 
+describe('KvFilesystem.removeFile', () => {
+    it('removes a file from its parent directory and frees its blocks', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        await fs.createFile('note.txt', root);
+
+        await fs.removeFile('note.txt', root);
+
+        expect(await root.hasEntry('note.txt')).toBe(false);
+    });
+
+    it('throws KvError_FS_NotFound when the file does not exist', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+
+        await expect(fs.removeFile('missing.txt', root)).rejects.toBeInstanceOf(KvError_FS_NotFound);
+    });
+});
+
 describe('KvFilesystem.removeDirectory', () => {
     it('removes an empty directory and frees its inode block', async () => {
         const fs = await makeFs();
@@ -47,7 +66,7 @@ describe('KvFilesystem.removeDirectory', () => {
         expect(await root.hasEntry('child')).toBe(false);
     });
 
-    it('throws KvError_FS_NotEmpty when the directory still has entries', async () => {
+    it('throws KvError_FS_NotEmpty when the directory still has entries (recursive=false default)', async () => {
         const fs = await makeFs();
         const root = await fs.getRootDirectory();
         const child = await fs.createDirectory('child', root);
@@ -63,6 +82,40 @@ describe('KvFilesystem.removeDirectory', () => {
         const root = await fs.getRootDirectory();
 
         await expect(fs.removeDirectory('nope', root)).rejects.toBeInstanceOf(KvError_FS_NotFound);
+    });
+
+    it('with recursive=true, frees a directory holding files in one call', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const child = await fs.createDirectory('child', root);
+        await fs.createFile('a.txt', child);
+        await fs.createFile('b.txt', child);
+
+        await fs.removeDirectory('child', root, true);
+
+        expect(await root.hasEntry('child')).toBe(false);
+    });
+
+    it('with recursive=true, frees a deeply nested tree (files and dirs alike)', async () => {
+        const device = new KvBlockDeviceMemory(BLOCK_SIZE, CAPACITY_BYTES);
+        await KvFilesystem.format(device, 64);
+        const fs = new KvFilesystem(device, 0);
+
+        const root = await fs.getRootDirectory();
+        const a = await fs.createDirectory('a', root);
+        const b = await fs.createDirectory('b', a);
+        const c = await fs.createDirectory('c', b);
+        await fs.createFile('leaf.txt', c);
+        await fs.createFile('side.txt', a);
+        const beforePeak = await device.getHighestBlockId();
+
+        await fs.removeDirectory('a', root, true);
+
+        expect(await root.hasEntry('a')).toBe(false);
+        // Recursive removal frees the inode + data blocks of every entry,
+        // so the high-water mark should drop back below where it stood
+        // when the tree existed.
+        expect(await device.getHighestBlockId()).toBeLessThan(beforePeak);
     });
 });
 

@@ -79,7 +79,7 @@ describe('kv-fs (acceptance)', () => {
 
         expect(decoder.decode(await fs.readFile(path))).toBe('temporary');
 
-        await fs.unlink(path);
+        await fs.removeFile(path);
 
         await expect(fs.readFile(path)).rejects.toBeDefined();
         expect(await fs.readDirectory('/tmp')).not.toContain('disposable.txt');
@@ -152,9 +152,9 @@ describe('kv-fs (acceptance)', () => {
         }
         const peakHighWaterMark = await blockDevice.getHighestBlockId();
 
-        // Unlink down to 5 — well within first-block capacity.
+        // Remove down to 5 — well within first-block capacity.
         for (let i = 5; i < 40; i++) {
-            await fs.unlink(`/shrink/file-${i}.txt`);
+            await fs.removeFile(`/shrink/file-${i}.txt`);
         }
 
         const listing = await fs.readDirectory('/shrink');
@@ -190,7 +190,7 @@ describe('kv-fs (acceptance)', () => {
         expect(decoder.decode(await fs.readFile('/projects/gamma/notes.txt'))).toBe('alpha-original');
 
         // Cleanup: empty gamma, rmdir it, rmdir projects.
-        await fs.unlink('/projects/gamma/notes.txt');
+        await fs.removeFile('/projects/gamma/notes.txt');
         await fs.removeDirectory('/projects/gamma');
         await fs.removeDirectory('/projects');
         expect(await fs.readDirectory('/')).not.toContain('projects');

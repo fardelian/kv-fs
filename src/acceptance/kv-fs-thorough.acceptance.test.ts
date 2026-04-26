@@ -70,13 +70,13 @@ describe('kv-fs (thorough acceptance)', () => {
             const peak = await raw.getHighestBlockId();
 
             for (let i = 0; i < FILE_COUNT; i++) {
-                await fs.unlink(`/churn/x-${i}.txt`);
+                await fs.removeFile(`/churn/x-${i}.txt`);
             }
             const listing = await fs.readDirectory('/churn');
             expect(listing.length).toBe(0);
 
-            // After unlinking everything, the device should not have
-            // grown further (unlinks free blocks but leave the
+            // After removing everything, the device should not have
+            // grown further (removes free blocks but leave the
             // high-water mark at peak — what we really check is that
             // listing works & the directory chain is back to length 1).
             expect(await raw.getHighestBlockId()).toBeLessThanOrEqual(peak);
@@ -431,7 +431,7 @@ describe('kv-fs (thorough acceptance)', () => {
                     expected.set(name, content);
                 } else { // delete
                     const name = seedFaker.helpers.arrayElement(Array.from(expected.keys()));
-                    await fs.unlink(`/churn/${name}`);
+                    await fs.removeFile(`/churn/${name}`);
                     expected.delete(name);
                 }
             }

@@ -213,7 +213,7 @@ export class KvFuseHandlers {
     /** Delete a regular file. */
     public async unlink(path: string): Promise<void> {
         try {
-            await this.fs.unlink(path);
+            await this.fs.removeFile(path);
         } catch (err) {
             if (err instanceof KvError_FS_NotFound) {
                 throw new KvFuseError('ENOENT', `File "${path}" not found.`);

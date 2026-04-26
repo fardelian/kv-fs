@@ -1,6 +1,6 @@
 /**
  * Example: persist a kv-fs into a SQLite table and **really** mount it
- * via FUSE, then drop the user into a `bash` session whose `$KVFS_MOUNT`
+ * via FUSE, then drop the user into a `zsh` session whose `$KVFS_MOUNT`
  * points at the mount. The host's normal fs syscalls (`ls`, `cat`,
  * `echo >>`, `cp`, `df`, `touch`, ...) all flow through the kernel
  * into our handlers.
@@ -21,11 +21,11 @@
  * Lifecycle:
  *   1. Open SQLite, format the volume on first run.
  *   2. Mount via FUSE at `$KVFS_MOUNT` (default `/tmp/kvfs-manual`).
- *   3. Spawn `bash` with stdio inherited and `KVFS_MOUNT` exported.
+ *   3. Spawn `zsh` with stdio inherited and `KVFS_MOUNT` exported.
  *   4. When the shell exits — `exit` / Ctrl+D — run shutdown:
  *      `fuse.unmount → KvFilesystem.flush() → database.close() → exit 0`.
  *   5. SIGTERM from outside kills the shell, which funnels through the
- *      same shutdown path. SIGINT inside the shell stays with bash
+ *      same shutdown path. SIGINT inside the shell stays with zsh
  *      (Ctrl+C just refreshes its prompt).
  */
 import { spawn } from 'node:child_process';
@@ -278,7 +278,7 @@ async function run(): Promise<void> {
         });
     });
     console.log(`[6/${STEP_COUNT}] mounted at ${MOUNT_POINT}.`);
-    console.log('Spawning bash with cwd=$KVFS_MOUNT. Try:');
+    console.log('Spawning zsh with cwd=$KVFS_MOUNT. Try:');
     console.log('  ls -al');
     console.log('  cat README.txt');
     console.log('  cat example/hello.txt');
@@ -286,7 +286,7 @@ async function run(): Promise<void> {
     console.log('  df .');
     console.log('Type `exit` (or Ctrl+D) to unmount and quit.');
 
-    // ---- 4. Spawn `bash` and shut down cleanly when it exits ----
+    // ---- 4. Spawn `zsh` and shut down cleanly when it exits ----
     let shuttingDown = false;
     const shutdown = (reason: string): void => {
         if (shuttingDown) return;
@@ -323,9 +323,9 @@ async function run(): Promise<void> {
     // request to the FUSE daemon (us) while our event loop is still
     // blocked inside posix_spawn waiting for child setup. Hard freeze
     // until the mount is torn down (then spawn fails with ENOTCONN).
-    // Have bash do the cd itself after it's running — by then our event
+    // Have zsh do the cd itself after it's running — by then our event
     // loop is free to serve the FUSE callbacks and the cd succeeds.
-    const shell = spawn('bash', ['-c', 'cd "$KVFS_MOUNT" && exec bash'], {
+    const shell = spawn('zsh', ['-c', 'cd "$KVFS_MOUNT" && exec zsh'], {
         stdio: 'inherit',
         env: { ...process.env, KVFS_MOUNT: MOUNT_POINT },
     });
@@ -341,8 +341,8 @@ async function run(): Promise<void> {
         if (!shell.killed) shell.kill('SIGTERM');
         else shutdown('SIGTERM');
     });
-    // Inside the shell, Ctrl+C is bash's to handle (it just refreshes
-    // the prompt). The terminal driver delivers SIGINT to both bash and
+    // Inside the shell, Ctrl+C is zsh's to handle (it just refreshes
+    // the prompt). The terminal driver delivers SIGINT to both zsh and
     // us; ignoring it here keeps the shell session alive — the user
     // ends the session with `exit` instead.
     process.on('SIGINT', () => {
@@ -379,7 +379,7 @@ run().catch((err: unknown) => {
  *    The default mount point is /tmp/kvfs-manual; override with the
  *    KVFS_MOUNT environment variable if you'd rather mount elsewhere.
  *
- * 3) The example mounts and drops you into a `bash` session whose
+ * 3) The example mounts and drops you into a `zsh` session whose
  *    cwd is the mount (also exported as $KVFS_MOUNT). Try:
  *
  *        ls -al

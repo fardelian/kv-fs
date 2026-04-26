@@ -163,7 +163,7 @@ wrap their own block device with `KvEncryptedBlockDevice`, but for different rea
 There are two FUSE examples; they target the same `KvFuseHandlers` adapter from different angles:
 
 - [`example-sqlite-permanent-fuse-auto.ts`](src/examples/example-sqlite-permanent-fuse-auto.ts) — drives the FUSE handler API in-process. Useful as a smoke test or a tour of the adapter; does **not** actually mount, so you don't need any system FUSE library to run it. `npm run start-sqlite-permanent-fuse`.
-- [`example-sqlite-permanent-fuse-manual.ts`](src/examples/example-sqlite-permanent-fuse-manual.ts) — *really* mounts the kv-fs at an OS mount point via [`@cocalc/fuse-native`](https://www.npmjs.com/package/@cocalc/fuse-native), then drops you into a `bash` session with `$KVFS_MOUNT` pointing at the mount. `ls`, `cat`, `echo >>`, `cp`, `df`, `touch`, `chmod` (silently ignored) all flow through the kernel into our handlers.
+- [`example-sqlite-permanent-fuse-manual.ts`](src/examples/example-sqlite-permanent-fuse-manual.ts) — *really* mounts the kv-fs at an OS mount point via [`@cocalc/fuse-native`](https://www.npmjs.com/package/@cocalc/fuse-native), then drops you into a `zsh` session with `$KVFS_MOUNT` pointing at the mount. `ls`, `cat`, `echo >>`, `cp`, `df`, `touch`, `chmod` (silently ignored) all flow through the kernel into our handlers.
 
 We use [`@cocalc/fuse-native`](https://www.npmjs.com/package/@cocalc/fuse-native) rather than the original [`fuse-native`](https://www.npmjs.com/package/fuse-native): the original has been unmaintained since 2021 and its native binary segfaults inside `mount()` on recent macOS releases (macFUSE 4+ / Apple Silicon). The cocalc fork keeps the same API and rebuilds against modern macFUSE / FUSE-T / libfuse.
 
@@ -194,7 +194,7 @@ To run the manual mount example:
    npm run start-sqlite-permanent-fuse-manual
    ```
 
-   Default mount point is `/tmp/kvfs-manual`; override with the `KVFS_MOUNT` environment variable. The example mounts, then spawns `bash` with `$KVFS_MOUNT` exported.
+   Default mount point is `/tmp/kvfs-manual`; override with the `KVFS_MOUNT` environment variable. The example mounts, then spawns `zsh` with `$KVFS_MOUNT` exported and the shell already inside the mount.
 5. **Drive the volume from inside the shell**:
 
    ```bash

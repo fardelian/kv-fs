@@ -158,6 +158,55 @@ wrap their own block device with `KvEncryptedBlockDevice`, but for different rea
   entirely if the disk is already trusted). What gives you confidentiality against the server
   is the *client-side* layer.
 
+### Mounting via FUSE
+
+There are two FUSE examples; they target the same `KvFuseHandlers` adapter from different angles:
+
+- [`example-sqlite-permanent-fuse-auto.ts`](src/examples/example-sqlite-permanent-fuse-auto.ts) — drives the FUSE handler API in-process. Useful as a smoke test or a tour of the adapter; does **not** actually mount, so you don't need any system FUSE library to run it. `npm run start-sqlite-permanent-fuse`.
+- [`example-sqlite-permanent-fuse-manual.ts`](src/examples/example-sqlite-permanent-fuse-manual.ts) — *really* mounts the kv-fs at an OS mount point via [`fuse-native`](https://www.npmjs.com/package/fuse-native), then drops you into a `bash` session with `$KVFS_MOUNT` pointing at the mount. `ls`, `cat`, `echo >>`, `cp`, `df`, `touch`, `chmod` (silently ignored) all flow through the kernel into our handlers.
+
+`fuse-native` is declared as an `optionalDependency` and as a `trustedDependency`, so `bun install` will compile it (and run its postinstall to fetch / build the native binary) on systems where the OS-level FUSE library is present, and silently skip it everywhere else. There's no `bun add` step.
+
+To run the manual mount example:
+
+1. **Install the OS-level FUSE library** (one-time):
+    - **macOS** — install [macFUSE](https://osxfuse.github.io/) or [FUSE-T](https://www.fuse-t.org/). FUSE-T is kext-free and is usually the easier setup on Apple Silicon.
+    - **Linux** — `apt install libfuse-dev` (Debian/Ubuntu) or `dnf install fuse3-devel` (Fedora). The kernel module ships with most distros.
+2. **Install the project** (compiles `fuse-native`):
+
+   ```bash
+   bun install
+   ```
+
+   If you'd run `bun install` previously without the OS library, bun won't retry the optional dep on its own. Force it with:
+
+   ```bash
+   bun install --force
+   ```
+
+   You may see `Blocked N postinstall. Run \`bun pm untrusted\` for details.` — bun blocks postinstall scripts from packages it doesn't recognise. `fuse-native` is in the `trustedDependencies` allow-list in [`package.json`](package.json), so this should clear itself; if it doesn't, run `bun pm trust fuse-native` once and then `bun install --force`.
+3. **Run the example**:
+
+   ```bash
+   npm run start-sqlite-permanent-fuse-manual
+   ```
+
+   Default mount point is `/tmp/kvfs-manual`; override with the `KVFS_MOUNT` environment variable. The example mounts, then spawns `bash` with `$KVFS_MOUNT` exported.
+4. **Drive the volume from inside the shell**:
+
+   ```bash
+   ls -al "$KVFS_MOUNT"
+   echo 'hello' > "$KVFS_MOUNT/greet.txt"
+   echo ' world' >> "$KVFS_MOUNT/greet.txt"
+   cat "$KVFS_MOUNT/greet.txt"
+   df "$KVFS_MOUNT"
+   ```
+
+   The kv-fs state lives in `data/data.sqlite3` (table `blocks_fuse_manual`) and persists across runs.
+5. **Exit the shell** (`exit` / Ctrl+D) to unmount cleanly. The shutdown path runs `fuse.unmount → KvFilesystem.flush() → database.close() → exit 0`. SIGTERM from outside has the same effect.
+
+If a crash leaves the mount stale, force-unmount with `umount /tmp/kvfs-manual` (Linux) or `diskutil unmount /tmp/kvfs-manual` (macOS) before restarting.
+
 ## Tests
 
 Two flavors:

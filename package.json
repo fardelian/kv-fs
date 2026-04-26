@@ -42,5 +42,8 @@
   },
   "overrides": {
     "sqlite3": "6.0.1"
-  }
+  },
+  "trustedDependencies": [
+    "fuse-native"
+  ]
 }

@@ -11,29 +11,32 @@ const ENC_ITERATIONS = 10;
 const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
+/** Total number of `[N/STEP_COUNT]` log lines this script emits. Bump when adding a step. */
+const STEP_COUNT = 6;
+
 async function run() {
-    // Pure transport — fetches blockSize/capacityBytes from the server.
+    console.log(`[1/${STEP_COUNT}] connecting to remote block device at http://localhost:${PORT}...`);
     const httpClient = new KvBlockDeviceHttpClient(`http://localhost:${PORT}`);
 
     // Peek at what the server advertises before init() does the same fetch.
     const metaBefore = await fetch(`http://localhost:${PORT}/blocks`);
-    console.log('GET /blocks:', await metaBefore.json());
+    console.log('  GET /blocks:', await metaBefore.json());
 
     await httpClient.init();
 
-    // Wrap with encryption. The exposed block size shrinks by the cipher's
-    // overhead; the wire still carries blocks of the server's size.
+    console.log(`[2/${STEP_COUNT}] wrapping the transport with password-based encryption...`);
+    // The exposed block size shrinks by the cipher's overhead; the wire
+    // still carries blocks of the server's size.
     const clientEncryption = new KvEncryptionPassword(ENC_PASSWORD, ENC_SALT, ENC_ITERATIONS);
     const clientBlockDevice = new KvEncryptedBlockDevice(httpClient, clientEncryption);
 
-    // Format and mount.
+    console.log(`[3/${STEP_COUNT}] formatting a fresh kv-fs volume on the remote device...`);
     await KvFilesystem.format(clientBlockDevice, TOTAL_INODES);
 
     const fileSystem = new KvFilesystem(clientBlockDevice, SUPER_BLOCK_ID);
     const easyFileSystem = new KvFilesystemSimple(fileSystem, '/');
 
-    // Create test files
-
+    console.log(`[4/${STEP_COUNT}] creating test files under /home/florin/...`);
     await easyFileSystem.createDirectory('/home/florin', true);
 
     const testPath1 = '/home/florin/test1.txt';
@@ -44,26 +47,25 @@ async function run() {
     const testFile2 = await easyFileSystem.createFile(testPath2);
     await testFile2.write(new TextEncoder().encode('and hello again'));
 
-    // Read test files
-
+    console.log(`[5/${STEP_COUNT}] reading test files back + walking the directory tree...`);
     const testRead1 = await easyFileSystem.readFile(testPath1);
     const testRead2 = await easyFileSystem.readFile(testPath2);
     const testDir = await easyFileSystem.getDirectory('/home/florin');
 
     const decoder = new TextDecoder();
-    console.log('testRead1:', decoder.decode(testRead1));
-    console.log('testRead2:', decoder.decode(testRead2));
-    console.log('testDir:', await testDir.read());
+    console.log('  testRead1:', decoder.decode(testRead1));
+    console.log('  testRead2:', decoder.decode(testRead2));
+    console.log('  testDir:', await testDir.read());
 
     const homeDir = await easyFileSystem.getDirectory('/home');
-    console.log('homeDir:', await homeDir.read());
+    console.log('  homeDir:', await homeDir.read());
 
     const rootDir = await easyFileSystem.getDirectory('/');
-    console.log('rootDir:', await rootDir.read());
+    console.log('  rootDir:', await rootDir.read());
 
-    // Peek at what the server advertises after the demo has finished.
+    console.log(`[6/${STEP_COUNT}] re-fetching server metadata to confirm allocations:`);
     const metaAfter = await fetch(`http://localhost:${PORT}/blocks`);
-    console.log('GET /blocks:', await metaAfter.json());
+    console.log('  GET /blocks:', await metaAfter.json());
 }
 
 run().catch((err: unknown) => {

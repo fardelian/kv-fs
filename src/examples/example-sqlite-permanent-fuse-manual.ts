@@ -125,8 +125,8 @@ async function run(): Promise<void> {
 
     // Format only when the table is empty.
     const highest = await blockDevice.getHighestBlockId();
-    const wasFormatted = highest === -1;
-    if (wasFormatted) {
+    const needsFormat = highest < 2;
+    if (needsFormat) {
         console.log(`[3/${STEP_COUNT}] table "${TABLE_NAME}" is empty — formatting a fresh kv-fs volume.`);
         await KvFilesystem.format(blockDevice, TOTAL_INODES);
     } else {
@@ -141,7 +141,7 @@ async function run(): Promise<void> {
     // something self-explanatory rather than an empty directory. Done
     // before mount so the seed writes go straight through the kv-fs
     // API instead of round-tripping through the FUSE kernel layer.
-    if (wasFormatted) {
+    if (needsFormat) {
         const enc = new TextEncoder();
         await easyFs.createFile('/README.txt');
         await easyFs.writeFile('/README.txt', enc.encode(

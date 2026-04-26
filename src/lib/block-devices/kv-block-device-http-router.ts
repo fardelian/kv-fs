@@ -1,5 +1,25 @@
-import { KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
+import { KvBatchOp, KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
 import { Router } from 'express';
+
+interface WireBatchOp {
+    /**
+     * Stays as `string` rather than the narrower `'read' | 'write' | 'free'`
+     * so runtime payload validation actually has something to check —
+     * trusting the type at the JSON boundary leaves us with no way to
+     * reject a malformed `op` field.
+     */
+    op: string;
+    blockId: number;
+    /** Hex-encoded data, only present for write ops. */
+    data?: string;
+}
+
+interface WireBatchResult {
+    ok: boolean;
+    /** Hex-encoded read result, only on successful read. */
+    data?: string;
+    error?: string;
+}
 
 // Parse `:blockId` and validate it falls inside the device's
 // current capacity. Returns -1 to signal "invalid" (per the
@@ -50,6 +70,51 @@ export class KvBlockDeviceHttpRouter {
                     highestBlockId: await this.blockDevice.getHighestBlockId(),
                 };
                 res.json({ data: meta });
+            })
+
+            // POST /blocks/batch — run many block ops in one round-trip.
+            // JSON in (hex-encoded data for writes), JSON out (hex-encoded
+            // data for read results). Per-op errors are captured in the
+            // result; only fully malformed bodies return non-2xx.
+            //
+            // Mounted before POST /blocks so the more specific path
+            // matches first.
+            .post('/blocks/batch', async (req, res) => {
+                const body = req.body as { ops?: WireBatchOp[] } | undefined;
+                if (!body || !Array.isArray(body.ops)) {
+                    res.status(400).json({ error: 'Expected { ops: [...] } JSON body.' });
+                    return;
+                }
+
+                const ops: KvBatchOp[] = [];
+                for (const wireOp of body.ops) {
+                    if (typeof wireOp.blockId !== 'number') {
+                        res.status(400).json({ error: 'Each op needs a numeric blockId.' });
+                        return;
+                    }
+                    if (wireOp.op === 'read') {
+                        ops.push({ op: 'read', blockId: wireOp.blockId });
+                    } else if (wireOp.op === 'write') {
+                        if (typeof wireOp.data !== 'string') {
+                            res.status(400).json({ error: 'Write op requires hex `data`.' });
+                            return;
+                        }
+                        ops.push({ op: 'write', blockId: wireOp.blockId, data: hexDecode(wireOp.data) });
+                    } else if (wireOp.op === 'free') {
+                        ops.push({ op: 'free', blockId: wireOp.blockId });
+                    } else {
+                        res.status(400).json({ error: `Unknown op: ${wireOp.op}` });
+                        return;
+                    }
+                }
+
+                const results = await this.blockDevice.batch(ops);
+                const wireResults: WireBatchResult[] = results.map((r) => {
+                    if (!r.ok) return { ok: false, error: r.error };
+                    if (r.data) return { ok: true, data: hexEncode(r.data) };
+                    return { ok: true };
+                });
+                res.json({ results: wireResults });
             })
 
             // POST /blocks — allocate a new block ID and (optionally)
@@ -150,4 +215,12 @@ function bodyAsBytes(body: unknown): Uint8Array | undefined {
         return body;
     }
     return undefined;
+}
+
+function hexEncode(bytes: Uint8Array): string {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('hex');
+}
+
+function hexDecode(hex: string): Uint8Array {
+    return new Uint8Array(Buffer.from(hex, 'hex'));
 }

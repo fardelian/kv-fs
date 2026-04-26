@@ -1,6 +1,20 @@
 import { INodeId } from '../../inode';
 
 /**
+ * One operation in a batched request. Reads return their bytes in the
+ * matching `BatchResult`; writes/frees return only `ok` (true on success
+ * or `error` on failure so a single op's failure doesn't drop the rest).
+ */
+export type KvBatchOp
+    = { op: 'read'; blockId: INodeId }
+        | { op: 'write'; blockId: INodeId; data: Uint8Array }
+        | { op: 'free'; blockId: INodeId };
+
+export type KvBatchResult
+    = { ok: true; data?: Uint8Array }
+        | { ok: false; error: string };
+
+/**
  * Self-describing metadata about a block device. Sent over the wire by
  * `KvBlockDeviceHttpRouter`'s `GET /blocks` endpoint and read back by
  * `KvBlockDeviceHttpClient.init()` so the client doesn't have to be told
@@ -229,6 +243,110 @@ export abstract class KvBlockDevice {
         const block = await this.readBlock(blockId);
         block.set(data, offset);
         await this.writeBlock(blockId, block);
+    }
+
+    /**
+     * Read a list of blocks in one batch, optionally mixed with decoy
+     * reads picked uniformly from the device's allocated range. Returns
+     * the bytes for each real read in input order; decoy results are
+     * fetched, shuffled in, and discarded.
+     *
+     * The point is access-pattern obfuscation against a server (or
+     * anyone observing the wire): a single batch with N real and M
+     * decoy reads looks identical to a batch of (N+M) reads, with no
+     * way to tell which were the caller's intent.
+     *
+     * Caveats: this is a basic obfuscation, not Oblivious RAM. Decoys
+     * are uniformly random in `[0, highestBlockId]`; if the attacker
+     * has prior knowledge of the access distribution they can still
+     * filter. For real ORAM, more invasive changes are required.
+     *
+     * @param realIds      Block IDs the caller actually wants.
+     * @param decoyCount   Number of dummy reads to mix in. 0 = plain batch.
+     */
+    public async readBlocksWithDecoys(
+        realIds: INodeId[],
+        decoyCount = 0,
+    ): Promise<Uint8Array[]> {
+        const decoyIds: INodeId[] = [];
+        if (decoyCount > 0) {
+            const highest = await this.getHighestBlockId();
+            if (highest >= 0) {
+                for (let i = 0; i < decoyCount; i++) {
+                    decoyIds.push(Math.floor(Math.random() * (highest + 1)));
+                }
+            }
+        }
+
+        interface Slot {
+            blockId: INodeId;
+            isReal: boolean;
+            realIdx: number;
+        }
+        const slots: Slot[] = [];
+        realIds.forEach((id, idx) => slots.push({ blockId: id, isReal: true, realIdx: idx }));
+        decoyIds.forEach((id) => slots.push({ blockId: id, isReal: false, realIdx: -1 }));
+
+        // Fisher-Yates shuffle so the wire order doesn't betray the
+        // real-vs-decoy split.
+        for (let i = slots.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [slots[i], slots[j]] = [slots[j], slots[i]];
+        }
+
+        const ops = slots.map((s): KvBatchOp => ({ op: 'read', blockId: s.blockId }));
+        const results = await this.batch(ops);
+
+        const realResults = new Array<Uint8Array>(realIds.length);
+        slots.forEach((slot, batchIdx) => {
+            if (!slot.isReal) return;
+            const r = results[batchIdx];
+            if (!r.ok) {
+                throw new Error(`Read of block ${slot.blockId} failed: ${r.error}`);
+            }
+            if (!r.data) {
+                throw new Error(`Read of block ${slot.blockId} returned no data.`);
+            }
+            realResults[slot.realIdx] = r.data;
+        });
+        return realResults;
+    }
+
+    /**
+     * Run a batched sequence of read / write / free operations against
+     * the device. Returns one result per op, in input order. A single
+     * op's failure is captured in its `BatchResult` rather than throwing
+     * the whole batch, so callers can decide per-op whether to retry.
+     *
+     * The default implementation is a sequential dispatch — concrete
+     * backends with a native batch primitive (HTTP `POST /blocks/batch`,
+     * a SQL transaction, …) should override this for both round-trip
+     * efficiency and access-pattern obfuscation: a server seeing one
+     * batch can't tell which op was the "real" caller's intent vs. any
+     * decoy ops the client mixed in.
+     */
+    public async batch(ops: KvBatchOp[]): Promise<KvBatchResult[]> {
+        const results: KvBatchResult[] = [];
+        for (const op of ops) {
+            try {
+                switch (op.op) {
+                    case 'read':
+                        results.push({ ok: true, data: await this.readBlock(op.blockId) });
+                        break;
+                    case 'write':
+                        await this.writeBlock(op.blockId, op.data);
+                        results.push({ ok: true });
+                        break;
+                    case 'free':
+                        await this.freeBlock(op.blockId);
+                        results.push({ ok: true });
+                        break;
+                }
+            } catch (err) {
+                results.push({ ok: false, error: err instanceof Error ? err.message : String(err) });
+            }
+        }
+        return results;
     }
 
     /**

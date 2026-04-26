@@ -1,6 +1,26 @@
-import { KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
+import { KvBatchOp, KvBatchResult, KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
 import { Init, KvError_BD_Overflow } from '../utils';
+
+interface WireBatchOp {
+    op: 'read' | 'write' | 'free';
+    blockId: number;
+    data?: string;
+}
+
+interface WireBatchResult {
+    ok: boolean;
+    data?: string;
+    error?: string;
+}
+
+function hexEncode(bytes: Uint8Array): string {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('hex');
+}
+
+function hexDecode(hex: string): Uint8Array {
+    return new Uint8Array(Buffer.from(hex, 'hex'));
+}
 
 /**
  * KvBlockDevice that delegates every operation to a remote
@@ -110,6 +130,38 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         const res = await this.request(`${this.baseUrl}/blocks`);
         const body = await res.json() as { data: KvBlockDeviceMetadata };
         return body.data.highestBlockId;
+    }
+
+    /**
+     * Send a list of ops to the server's `/blocks/batch` endpoint in
+     * one round-trip. Overrides the abstract default (sequential
+     * dispatch) so that N ops cost 1 HTTP request instead of N.
+     */
+    @Init
+    public async batch(ops: KvBatchOp[]): Promise<KvBatchResult[]> {
+        const wireOps: WireBatchOp[] = ops.map((o) => {
+            if (o.op === 'write') {
+                return { op: 'write', blockId: o.blockId, data: hexEncode(o.data) };
+            }
+            return { op: o.op, blockId: o.blockId };
+        });
+
+        const res = await this.request(`${this.baseUrl}/blocks/batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ops: wireOps }),
+        });
+        const body = await res.json() as { results: WireBatchResult[] };
+
+        return body.results.map((r): KvBatchResult => {
+            if (!r.ok) {
+                return { ok: false, error: r.error ?? 'unknown error' };
+            }
+            if (r.data !== undefined) {
+                return { ok: true, data: hexDecode(r.data) };
+            }
+            return { ok: true };
+        });
     }
 
     /**

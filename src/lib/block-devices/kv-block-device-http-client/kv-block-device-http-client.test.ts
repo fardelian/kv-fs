@@ -39,9 +39,9 @@ const mockFetch = jest.fn<typeof fetch>();
 
 beforeEach(() => {
     mockFetch.mockReset();
-    // Bun's `typeof fetch` includes a `preconnect` static property the
-    // mock doesn't model; cast through `unknown` to swap the function
-    // reference while leaving the unused property unmodelled.
+    // Cast through `unknown` to swap the function reference: `typeof fetch`
+    // on some runtimes carries extra static properties the mock doesn't
+    // model, and a direct assignment trips the structural type check.
     (globalThis as unknown as { fetch: unknown }).fetch = mockFetch;
 });
 

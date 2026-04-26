@@ -2,7 +2,7 @@ import { KvBatchOp, KvBatchResult, KvBlockDevice, KvBlockDeviceMetadata } from '
 import { WireBatchOp, WireBatchResult } from '../kv-block-device-common/kv-block-device-common';
 import { INodeId } from '../../inode';
 import { Init, KvError_BD_Overflow } from '../../utils';
-import { hexDecode, hexEncode } from './helpers';
+import { hexDecode, hexEncode } from './utils';
 
 /**
  * KvBlockDevice that delegates every operation to a remote

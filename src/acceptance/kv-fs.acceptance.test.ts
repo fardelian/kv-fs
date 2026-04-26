@@ -188,17 +188,17 @@ describe('kv-filesystem (acceptance)', () => {
         expect(dec.decode(manual3.subarray(sizeBefore))).toBe('TAIL');
 
         // ---- 15. Refactor: rename a depth-3 file in-place ----
-        await fs.rename('utils.ts', alphaLib, 'helpers.ts', alphaLib);
+        await fs.rename('utils.ts', alphaLib, 'string-utils.ts', alphaLib);
         expect(await alphaLib.hasEntry('utils.ts')).toBe(false);
-        expect(await alphaLib.hasEntry('helpers.ts')).toBe(true);
+        expect(await alphaLib.hasEntry('string-utils.ts')).toBe(true);
         // The bytes are still reachable through the new name.
-        const helpers = await fs.getKvFile('helpers.ts', alphaLib);
-        expect(dec.decode(await fs.read(helpers, 0))).toBe('export const VERSION = "1.0";');
+        const stringUtils = await fs.getKvFile('string-utils.ts', alphaLib);
+        expect(dec.decode(await fs.read(stringUtils, 0))).toBe('export const VERSION = "1.0";');
 
         // ---- 16. Refactor: move a depth-3 file up to depth 2 ----
-        await fs.rename('helpers.ts', alphaLib, 'helpers.ts', alpha);
-        expect(await alphaLib.hasEntry('helpers.ts')).toBe(false);
-        expect(await alpha.hasEntry('helpers.ts')).toBe(true);
+        await fs.rename('string-utils.ts', alphaLib, 'string-utils.ts', alpha);
+        expect(await alphaLib.hasEntry('string-utils.ts')).toBe(false);
+        expect(await alpha.hasEntry('string-utils.ts')).toBe(true);
 
         // ---- 17. Refactor: rename a directory at depth 2 ----
         await fs.rename('beta', projects, 'gamma', projects);

@@ -11,15 +11,6 @@ import { KvError_BD_NotFound, KvError_BD_Overflow } from '../../utils';
 export class KvBlockDeviceMemory extends KvBlockDevice {
     private readonly blocks: (Uint8Array | undefined)[] = [];
 
-    // Pass-through constructor that looks "useless" but exists on purpose:
-    // Bun's coverage tracker counts the synthesized constructor of an
-    // empty subclass as a separate uncovered function, so making it
-    // explicit gets the file to 100%.
-    // eslint-disable-next-line @typescript-eslint/no-useless-constructor
-    constructor(blockSize: number, capacityBytes: number) {
-        super(blockSize, capacityBytes);
-    }
-
     public async readBlock(blockId: INodeId): Promise<Uint8Array> {
         const block = this.blocks[blockId];
         if (block === undefined) {

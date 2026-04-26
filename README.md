@@ -174,25 +174,28 @@ To run the manual mount example:
 1. **Install the OS-level FUSE library** (one-time):
     - **macOS** — install [macFUSE](https://osxfuse.github.io/) or [FUSE-T](https://www.fuse-t.org/). FUSE-T is kext-free and is usually the easier setup on Apple Silicon.
     - **Linux** — `apt install libfuse-dev` (Debian/Ubuntu) or `dnf install fuse3-devel` (Fedora). The kernel module ships with most distros.
-2. **Install the project** (compiles `fuse-native`):
+2. **Install `pkg-config`** (one-time): the `node-gyp` build for `@cocalc/fuse-native` shells out to `pkg-config` to discover the FUSE library paths. Without it the build fails with `pkg-config: command not found`, npm silently drops the optional dep, and `npm install` looks like it succeeded.
+    - **macOS** — `brew install pkg-config`.
+    - **Linux** — `apt install pkg-config` (Debian/Ubuntu) or `dnf install pkgconf-pkg-config` (Fedora).
+3. **Install the project** (compiles `fuse-native`):
 
    ```bash
    npm install
    ```
 
-   If you'd run `npm install` previously without the OS library, npm won't retry the optional dep on its own. Force it with:
+   If you'd run `npm install` previously without the OS library or `pkg-config`, npm won't retry the optional dep on its own. Wipe and reinstall:
 
    ```bash
-   npm install --force
+   rm -rf node_modules package-lock.json && npm install
    ```
-3. **Run the example**:
+4. **Run the example**:
 
    ```bash
    npm run start-sqlite-permanent-fuse-manual
    ```
 
    Default mount point is `/tmp/kvfs-manual`; override with the `KVFS_MOUNT` environment variable. The example mounts, then spawns `bash` with `$KVFS_MOUNT` exported.
-4. **Drive the volume from inside the shell**:
+5. **Drive the volume from inside the shell**:
 
    ```bash
    ls -al "$KVFS_MOUNT"
@@ -203,7 +206,7 @@ To run the manual mount example:
    ```
 
    The kv-fs state lives in `data/data.sqlite3` (table `blocks_fuse_manual`) and persists across runs.
-5. **Exit the shell** (`exit` / Ctrl+D) to unmount cleanly. The shutdown path runs `fuse.unmount → KvFilesystem.flush() → database.close() → exit 0`. SIGTERM from outside has the same effect.
+6. **Exit the shell** (`exit` / Ctrl+D) to unmount cleanly. The shutdown path runs `fuse.unmount → KvFilesystem.flush() → database.close() → exit 0`. SIGTERM from outside has the same effect.
 
 If a crash leaves the mount stale, force-unmount with `umount /tmp/kvfs-manual` (Linux) or `diskutil unmount /tmp/kvfs-manual` (macOS) before restarting.
 

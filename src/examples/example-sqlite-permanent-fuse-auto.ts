@@ -17,8 +17,8 @@
  *   5. List the kv-fs root through the FUSE handlers — the same
  *      `(name, size, ctime)` tuples a real `fs.readdirSync` /
  *      `fs.statSync` against a mounted FUSE volume would produce.
- *   6. Use Node's built-in `fs/promises` (the one bundled with bun) to
- *      read what the *host* sees — a single `data.sqlite3` file
+ *   6. Use Node's built-in `fs/promises` to read what the *host* sees
+ *      — a single `data.sqlite3` file
  *      holding every kv-fs block. Side-by-side with the FUSE listing
  *      this makes the abstraction concrete: many "files" inside one
  *      backing file outside.
@@ -92,14 +92,13 @@ async function run(): Promise<void> {
         }
 
         // ---- 6. What the host sees: one backing SQLite file ----
-        // Node's `fs/promises` ships with bun; this is the "built-in
-        // bun fs module" view of the same volume — except the host
-        // sees the entire kv-fs as a single `.sqlite3` file because
-        // FUSE isn't actually mounted at the OS level here. The
-        // contrast is the point: the `easyFs.createFile` call above
-        // wrote a file inside the kv-fs, but on disk it's just a few
-        // more rows in one SQLite database file.
-        console.log('\nHost view (via bun fs/promises):');
+        // Node's `fs/promises` view of the same volume — except the
+        // host sees the entire kv-fs as a single `.sqlite3` file
+        // because FUSE isn't actually mounted at the OS level here.
+        // The contrast is the point: the `easyFs.createFile` call
+        // above wrote a file inside the kv-fs, but on disk it's just
+        // a few more rows in one SQLite database file.
+        console.log('\nHost view (via Node fs/promises):');
         const dbStat = await stat(DB_PATH);
         console.log(fmtRow(DB_PATH.replace(`${LOCAL_FS_PATH}/`, ''), dbStat.size, dbStat.birthtime));
     } finally {

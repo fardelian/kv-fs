@@ -14,9 +14,9 @@
  * API on both.
  *
  * The native binding is declared as an `optionalDependency` in
- * package.json — it will compile during `bun install` if the
- * OS-level FUSE library is present (macFUSE / FUSE-T on macOS,
- * libfuse on Linux) and silently skip otherwise.
+ * package.json — it will compile during `npm install` if the
+ * OS-level FUSE library and `pkg-config` are present (macFUSE / FUSE-T
+ * on macOS, libfuse on Linux) and silently skip otherwise.
  *
  * Lifecycle:
  *   1. Open SQLite, format the volume on first run.
@@ -47,9 +47,7 @@ const SUPER_BLOCK_ID = 0;
 
 const TABLE_NAME = 'blocks_fuse_manual';
 // Resolve `data/` relative to this source file via import.meta.url —
-// `__dirname` doesn't exist under tsx/Node ESM. (This example runs
-// under tsx instead of bun because Bun's NAPI loader currently
-// segfaults on fuse-native; see README "Mounting via FUSE".)
+// `__dirname` doesn't exist under Node ESM (this example runs via tsx).
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LOCAL_FS_PATH = resolve(HERE, '..', '..', 'data');
 const DB_PATH = `${LOCAL_FS_PATH}/data.sqlite3`;
@@ -102,12 +100,13 @@ async function run(): Promise<void> {
         console.log(`      loaded; default export typeof = ${typeof Fuse}`);
     } catch (err: unknown) {
         console.error('`@cocalc/fuse-native` did not load:', err);
-        console.error('It is an optionalDependency, so `bun install` skips it silently');
-        console.error('when the OS-level FUSE library is missing. To fix it:');
-        console.error('  - macOS: install macFUSE (https://osxfuse.github.io/) or FUSE-T (https://www.fuse-t.org/),');
-        console.error('           then re-run `bun install --force` to recompile the binding.');
-        console.error('  - Linux: install libfuse-dev (Debian/Ubuntu) or fuse3-devel (Fedora),');
-        console.error('           then re-run `bun install --force`.');
+        console.error('It is an optionalDependency, so `npm install` skips it silently');
+        console.error('when the OS-level FUSE library or `pkg-config` is missing. To fix it:');
+        console.error('  - macOS: install macFUSE (https://osxfuse.github.io/) or FUSE-T (https://www.fuse-t.org/)');
+        console.error('           plus `brew install pkg-config`,');
+        console.error('           then `rm -rf node_modules package-lock.json && npm install` to recompile the binding.');
+        console.error('  - Linux: install libfuse-dev (Debian/Ubuntu) or fuse3-devel (Fedora) plus pkg-config,');
+        console.error('           then `rm -rf node_modules package-lock.json && npm install`.');
         process.exit(1);
     }
 
@@ -123,7 +122,8 @@ async function run(): Promise<void> {
 
     // Format only when the table is empty.
     const highest = await blockDevice.getHighestBlockId();
-    if (highest === -1) {
+    const wasFormatted = highest === -1;
+    if (wasFormatted) {
         console.log(`[3/6] table "${TABLE_NAME}" is empty — formatting a fresh kv-fs volume.`);
         await KvFilesystem.format(blockDevice, TOTAL_INODES);
     } else {
@@ -133,6 +133,27 @@ async function run(): Promise<void> {
     const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
     const easyFs = new KvFilesystemSimple(filesystem, '/');
     const handlers = new KvFuseHandlers(easyFs, BLOCK_SIZE);
+
+    // Seed a freshly-formatted volume so a first-time mount lands on
+    // something self-explanatory rather than an empty directory. Done
+    // before mount so the seed writes go straight through the kv-fs
+    // API instead of round-tripping through the FUSE kernel layer.
+    if (wasFormatted) {
+        const enc = new TextEncoder();
+        await easyFs.createFile('/README.txt');
+        await easyFs.writeFile('/README.txt', enc.encode(
+            'This is the kv-fs FUSE mount.\n'
+            + '\n'
+            + 'It is backed by a SQLite database at data/data.sqlite3 (table\n'
+            + '`blocks_fuse_manual`). Every read/write you do here goes through the\n'
+            + 'kv-fs handlers and is persisted in SQLite, so your changes survive\n'
+            + 'across runs of `npm run start-sqlite-permanent-fuse-manual`.\n',
+        ));
+        await easyFs.createDirectory('/example');
+        await easyFs.createFile('/example/hello.txt');
+        await easyFs.writeFile('/example/hello.txt', enc.encode('hello world\n'));
+        console.log('      seeded README.txt and example/hello.txt.');
+    }
 
     // ---- 2. Wire the handlers into fuse-native's vtable ----
     const ops: Record<string, unknown> = {
@@ -254,13 +275,12 @@ async function run(): Promise<void> {
         });
     });
     console.log(`[6/6] mounted at ${MOUNT_POINT}.`);
-    console.log('Spawning bash. The mount point is exported as $KVFS_MOUNT inside the shell.');
-    console.log('Try:');
-    console.log('  ls -al "$KVFS_MOUNT"');
-    console.log('  echo "hello" > "$KVFS_MOUNT/greet.txt"');
-    console.log('  cat "$KVFS_MOUNT/greet.txt"');
-    console.log('  echo " world" >> "$KVFS_MOUNT/greet.txt"');
-    console.log('  df "$KVFS_MOUNT"');
+    console.log('Spawning bash with cwd=$KVFS_MOUNT. Try:');
+    console.log('  ls -al');
+    console.log('  cat README.txt');
+    console.log('  cat example/hello.txt');
+    console.log('  echo "hi" > greet.txt && cat greet.txt');
+    console.log('  df .');
     console.log('Type `exit` (or Ctrl+D) to unmount and quit.');
 
     // ---- 4. Spawn `bash` and shut down cleanly when it exits ----
@@ -297,6 +317,7 @@ async function run(): Promise<void> {
     const shell = spawn('bash', [], {
         stdio: 'inherit',
         env: { ...process.env, KVFS_MOUNT: MOUNT_POINT },
+        cwd: MOUNT_POINT,
     });
 
     shell.on('exit', (code, signal) => {
@@ -327,39 +348,43 @@ run().catch((err: unknown) => {
 /*
  * ---- How to test ---------------------------------------------------
  *
- * 1) Make sure the OS-level FUSE library is installed so `bun install`
- *    can compile the `fuse-native` optionalDependency:
+ * 1) Make sure the OS-level FUSE library and `pkg-config` are
+ *    installed so `npm install` can compile the `fuse-native`
+ *    optionalDependency:
  *      - macOS: macFUSE (https://osxfuse.github.io/) or FUSE-T
  *        (https://www.fuse-t.org/). FUSE-T is the kext-free option
- *        and is usually the easier setup on Apple Silicon.
- *      - Linux: libfuse-dev (Debian/Ubuntu) or fuse3-devel (Fedora).
- *        The kernel module ships with most distros.
- *    Then `bun install` (re-run if you'd already installed without
- *    the OS library — bun will skip optionalDependencies that fail
- *    to compile and won't retry unless you force it).
+ *        and is usually the easier setup on Apple Silicon. Plus
+ *        `brew install pkg-config`.
+ *      - Linux: libfuse-dev (Debian/Ubuntu) or fuse3-devel (Fedora),
+ *        plus pkg-config. The kernel module ships with most distros.
+ *    Then `npm install`. If you'd already installed without the OS
+ *    library or pkg-config, npm won't retry the optional dep on its
+ *    own — wipe and reinstall:
+ *        rm -rf node_modules package-lock.json && npm install
  *
  * 2) Start the example:
  *
- *        bun run start-sqlite-permanent-fuse-manual
+ *        npm run start-sqlite-permanent-fuse-manual
  *
  *    The default mount point is /tmp/kvfs-manual; override with the
  *    KVFS_MOUNT environment variable if you'd rather mount elsewhere.
  *
- * 3) The example mounts and drops you into a `bash` session with
- *    $KVFS_MOUNT pointing at the mount. From inside the shell:
+ * 3) The example mounts and drops you into a `bash` session whose
+ *    cwd is the mount (also exported as $KVFS_MOUNT). Try:
  *
- *        ls -al "$KVFS_MOUNT"
- *        echo 'hello' > "$KVFS_MOUNT/greet.txt"
- *        cat "$KVFS_MOUNT/greet.txt"
- *        echo ' world' >> "$KVFS_MOUNT/greet.txt"   # tests append
- *        cat "$KVFS_MOUNT/greet.txt"
- *        mkdir "$KVFS_MOUNT/sub"
- *        cp "$KVFS_MOUNT/greet.txt" "$KVFS_MOUNT/sub/copy.txt"
- *        mv "$KVFS_MOUNT/sub/copy.txt" "$KVFS_MOUNT/copy.txt"
- *        rm "$KVFS_MOUNT/copy.txt"
- *        rmdir "$KVFS_MOUNT/sub"
- *        df "$KVFS_MOUNT"
- *        touch "$KVFS_MOUNT/greet.txt"
+ *        ls -al
+ *        cat README.txt
+ *        cat example/hello.txt
+ *        echo 'hello' > greet.txt
+ *        echo ' world' >> greet.txt   # tests append
+ *        cat greet.txt
+ *        mkdir sub
+ *        cp greet.txt sub/copy.txt
+ *        mv sub/copy.txt copy.txt
+ *        rm copy.txt
+ *        rmdir sub
+ *        df .
+ *        touch greet.txt
  *
  *    Each of those issues a FUSE call into our handlers; the kv-fs
  *    state lives in `data/data.sqlite3` (table `blocks_fuse_manual`)

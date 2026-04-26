@@ -153,27 +153,35 @@ export class KvFilesystem {
     }
 
     /**
-     * Flush any buffered file state to the backing block device. Stub
-     * for now — every `write` / `writePartial` already commits straight
+     * Flush buffered file state to the backing block device. Stub for
+     * now — every `write` / `writePartial` already commits straight
      * through to the block device, so there's nothing to flush, but
      * FUSE bindings call this on every `close(2)` and expect a method
      * here. Kept on `KvFilesystem` so the future case where we *do*
      * buffer (per-file dirty-page cache, batched journal flush, etc.)
      * has a single hook to fill in.
+     *
+     * `file` is optional: pass it for per-file flushes (FUSE flush
+     * callback), omit it for filesystem-wide flushes (clean-shutdown
+     * path: SIGTERM handler etc.). Stub semantics are the same in both
+     * shapes today.
      */
     @Init
-    public async flush(_file: KvINodeFile): Promise<void> {
+    public async flush(_file?: KvINodeFile): Promise<void> {
         // No-op: writes are write-through.
     }
 
     /**
-     * Force previously-written data on `file` to durable storage.
-     * Stub — the block device contract doesn't currently surface a
-     * `sync` primitive, so nothing further is forced beyond what
-     * `writeBlock` already did. Hook for future durability work.
+     * Force previously-written data to durable storage. Stub — the
+     * block device contract doesn't currently surface a `sync`
+     * primitive, so nothing further is forced beyond what `writeBlock`
+     * already did. Hook for future durability work.
+     *
+     * `file` is optional, mirroring {@link flush}: per-file for FUSE
+     * `fsync`, omitted for a filesystem-wide sync.
      */
     @Init
-    public async fsync(_file: KvINodeFile): Promise<void> {
+    public async fsync(_file?: KvINodeFile): Promise<void> {
         // No-op: writes are write-through; no durability boundary exposed yet.
     }
 

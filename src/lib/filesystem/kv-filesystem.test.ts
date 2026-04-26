@@ -201,12 +201,22 @@ describe('KvFilesystem.flush / fsync', () => {
         await expect(fs.flush(file)).resolves.toBeUndefined();
     });
 
+    it('flush() with no file is a filesystem-wide no-op', async () => {
+        const fs = await makeFs();
+        await expect(fs.flush()).resolves.toBeUndefined();
+    });
+
     it('fsync is a no-op', async () => {
         const fs = await makeFs();
         const root = await fs.getRootDirectory();
         const file = await fs.createFile('a.txt', root);
 
         await expect(fs.fsync(file)).resolves.toBeUndefined();
+    });
+
+    it('fsync() with no file is a filesystem-wide no-op', async () => {
+        const fs = await makeFs();
+        await expect(fs.fsync()).resolves.toBeUndefined();
     });
 });
 

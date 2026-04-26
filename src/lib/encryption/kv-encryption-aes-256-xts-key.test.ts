@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'test-globals';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { faker } from '@faker-js/faker';
 import { KvEncryptionAES256XTSKey } from './kv-encryption-aes-256-xts-key';
 import { KvError_Enc_Key } from '../utils';

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'test-globals';
+import { describe, it, expect } from 'bun:test';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceHttpRouter } from './kv-block-device-http-router';
 import { MockBlockDevice } from '../../mocks/kv-block-device.mock';

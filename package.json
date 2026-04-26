@@ -6,40 +6,34 @@
   "author": "Ardelian Florin <florin@ardelian.ro>",
   "license": "PROPRIETARY",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPatterns=acceptance",
-    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-    "test:bun": "bun test",
-    "test:bun:acceptance": "bun test ./src/acceptance",
-    "test:bun:coverage": "bun test --coverage",
-    "start-local-fs": "tsx src/examples/example-local-fs.ts",
-    "start-memory": "tsx src/examples/example-memory.ts",
-    "start-sqlite": "tsx src/examples/example-sqlite.ts",
-    "start-sqlite-permanent": "tsx src/examples/example-sqlite-permanent.ts",
-    "start-http-server": "tsx src/examples/example-http-server.ts",
-    "start-http-client": "tsx src/examples/example-http-client.ts"
+    "test": "bun test",
+    "test:acceptance": "bun test ./src/acceptance",
+    "test:coverage": "bun test --coverage",
+    "start-local-fs": "bun src/examples/example-local-fs.ts",
+    "start-memory": "bun src/examples/example-memory.ts",
+    "start-sqlite": "bun src/examples/example-sqlite.ts",
+    "start-sqlite-permanent": "bun src/examples/example-sqlite-permanent.ts",
+    "start-http-server": "bun src/examples/example-http-server.ts",
+    "start-http-client": "bun src/examples/example-http-client.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@faker-js/faker": "10.4.0",
     "@stylistic/eslint-plugin": "5.10.0",
+    "@types/bun": "1.3.13",
     "@types/express": "5.0.6",
-    "@types/jest": "30.0.0",
     "@types/node": "25.6.0",
+    "@typescript/native-preview": "7.0.0-dev.20260426.1",
     "eslint": "10.2.1",
-    "jest": "30.3.0",
-    "ts-jest": "29.4.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.59.0"
   },
   "dependencies": {
     "express": "5.2.1",
-    "express-router": "0.0.1",
-    "promised-sqlite3": "2.1.0",
-    "tsx": "4.21.0"
+    "promised-sqlite3": "2.1.0"
   },
   "overrides": {
     "sqlite3": "6.0.1"

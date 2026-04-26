@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from 'test-globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from 'bun:test';
 import { KvBlockDeviceHttpClient } from './kv-block-device-http-client';
 import { KvError_BD_Overflow } from '../utils';
 
@@ -39,11 +39,14 @@ const mockFetch = jest.fn<typeof fetch>();
 
 beforeEach(() => {
     mockFetch.mockReset();
-    (globalThis as { fetch: typeof fetch }).fetch = mockFetch;
+    // Bun's `typeof fetch` includes a `preconnect` static property the
+    // mock doesn't model; cast through `unknown` to swap the function
+    // reference while leaving the unused property unmodelled.
+    (globalThis as unknown as { fetch: unknown }).fetch = mockFetch;
 });
 
 afterEach(() => {
-    (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
+    (globalThis as unknown as { fetch: unknown }).fetch = originalFetch;
 });
 
 /** Make a `metadata` response that init() reads on first contact. */

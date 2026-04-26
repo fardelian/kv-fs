@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, jest } from 'test-globals';
+import { describe, it, expect, beforeAll, beforeEach, jest, mock } from 'bun:test';
 import { faker } from '@faker-js/faker';
 import * as path from 'path';
 
@@ -10,7 +10,7 @@ const mockUnlink = jest.fn<(p: string) => Promise<void>>();
 const mockAccess = jest.fn<(p: string) => Promise<void>>();
 const mockReaddir = jest.fn<(p: string) => Promise<string[]>>();
 
-jest.unstable_mockModule('fs/promises', () => ({
+mock.module('fs/promises', () => ({
     readFile: mockReadFile,
     writeFile: mockWriteFile,
     unlink: mockUnlink,

@@ -1,4 +1,4 @@
-import { describe, it, expect, jest } from 'test-globals';
+import { describe, it, expect, jest } from 'bun:test';
 import { KvBlockDeviceSqlite3 } from './kv-block-device-sqlite3';
 import { KvError_BD_NotFound } from '../utils';
 import type { AsyncDatabase } from 'promised-sqlite3';

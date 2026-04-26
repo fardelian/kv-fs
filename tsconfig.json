@@ -72,11 +72,7 @@
     // "isolatedModules": true,                          /* Ensure that each file can be safely transpiled without relying on other imports. */
     // "allowSyntheticDefaultImports": true,             /* Allow 'import x from y' when a module doesn't have a default export. */
     "esModuleInterop": true,                             /* Emit additional JavaScript to ease support for importing CommonJS modules. This enables 'allowSyntheticDefaultImports' for type compatibility. */
-    "ignoreDeprecations": "6.0",                         /* Silence TS 7 deprecation of `baseUrl`; we still need it for the `paths` table. */
-    "baseUrl": ".",                                      /* Anchor for the `paths` table below. */
-    "paths": {
-      "test-globals": ["src/test-globals.ts"]            /* Single import specifier for the test runtime shim — resolves under both jest (via moduleNameMapper) and bun (native tsconfig support). */
-    },
+    "types": ["bun"],                                    /* Pull in @types/bun (which transitively references bun-types) for `bun:test` module ambient types. Without this, `node_modules/@types/*` is auto-included by tsgo but bun:test isn't surfaced. */
     // "preserveSymlinks": true,                         /* Disable resolving symlinks to their realpath. This correlates to the same flag in node. */
     "forceConsistentCasingInFileNames": true,            /* Ensure that casing is correct in imports. */
 

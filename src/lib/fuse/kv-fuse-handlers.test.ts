@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'test-globals';
+import { describe, it, expect } from 'bun:test';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '../filesystem';
 import { KvFuseError, KvFuseHandlers } from './kv-fuse-handlers';

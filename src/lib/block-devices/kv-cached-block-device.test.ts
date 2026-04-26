@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'test-globals';
+import { describe, it, expect } from 'bun:test';
 import { KvCachedBlockDevice } from './kv-cached-block-device';
 import { MockBlockDevice } from '../../mocks/kv-block-device.mock';
 

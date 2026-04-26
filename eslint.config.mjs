@@ -57,25 +57,22 @@ export default tseslint.config(
         },
     },
 
-    // jest.config.js is CommonJS; tell ESLint about its globals and disable
-    // type-aware rules (it isn't part of the TS project).
-    {
-        files: ['jest.config.js', '**/*.cjs'],
-        ...tseslint.configs.disableTypeChecked,
-        languageOptions: {
-            sourceType: 'commonjs',
-            globals: {
-                module: 'readonly',
-                require: 'readonly',
-                __dirname: 'readonly',
-                __filename: 'readonly',
-            },
-        },
-    },
-
     // The eslint config itself isn't covered by tsconfig either.
     {
         files: ['eslint.config.mjs'],
         ...tseslint.configs.disableTypeChecked,
+    },
+
+    // Test files: bun-types' matcher signatures aren't always typed as
+    // Promises even when they're awaitable, and `mock.module(...)` is a
+    // fire-and-forget call that returns undefined. Drop the rules that
+    // would otherwise flag the standard test patterns.
+    {
+        files: ['**/*.test.ts', 'src/mocks/**/*.ts'],
+        rules: {
+            '@typescript-eslint/await-thenable': 'off',
+            '@typescript-eslint/no-confusing-void-expression': 'off',
+            '@typescript-eslint/no-floating-promises': 'off',
+        },
     },
 );

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'test-globals';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { faker } from '@faker-js/faker';
 import { SuperBlock } from './kv-super-block';
 import { MockBlockDevice } from '../../mocks/kv-block-device.mock';

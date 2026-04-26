@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'test-globals';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { KvBlockDeviceMemory } from '../kv-block-device-memory';
 
 // Small block size and a handful of blocks — enough to test boundary

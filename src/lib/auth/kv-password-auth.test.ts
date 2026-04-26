@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'test-globals';
+import { describe, it, expect } from 'bun:test';
 import {
     KV_PASSWORD_AUTH_KEY_LENGTH_BYTES,
     kvPasswordAuthDeriveAuthKey,

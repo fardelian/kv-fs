@@ -1,4 +1,4 @@
-import { describe, it, expect, jest } from 'test-globals';
+import { describe, it, expect, jest } from 'bun:test';
 import { Init } from './init';
 import { KvError_Init_Recursion } from './errors';
 

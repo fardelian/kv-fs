@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'test-globals';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { KvBlockDeviceMemory } from './kv-block-device-memory';
 import { KvJournaledBlockDevice } from './kv-journaled-block-device';
 import { KvError_BD_Overflow } from '../utils';

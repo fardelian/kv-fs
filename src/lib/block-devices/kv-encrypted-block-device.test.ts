@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from 'test-globals';
+import { describe, it, expect, beforeEach, jest } from 'bun:test';
 import { KvEncryptedBlockDevice } from './kv-encrypted-block-device';
 import { MockBlockDevice } from '../../mocks/kv-block-device.mock';
 import { KvError_BD_Overflow } from '../utils';

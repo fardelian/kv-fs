@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'test-globals';
+import { describe, it, expect } from 'bun:test';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvEncryptionRot13 } from '../lib/encryption';

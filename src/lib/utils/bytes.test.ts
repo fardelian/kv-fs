@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'test-globals';
+import { describe, it, expect } from 'bun:test';
 import { utf8Decode, utf8Encode, concatBytes, dataView } from './bytes';
 
 describe('utf8Encode / utf8Decode', () => {

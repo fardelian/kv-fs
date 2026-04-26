@@ -71,4 +71,7 @@ async function run() {
     console.log('time:', new Date().getTime() - t0);
 }
 
-run().catch(console.error);
+run().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+});

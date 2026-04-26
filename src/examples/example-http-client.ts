@@ -66,4 +66,7 @@ async function run() {
     console.log('GET /blocks:', await metaAfter.json());
 }
 
-run().catch(console.error);
+run().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+});

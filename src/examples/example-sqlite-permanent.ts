@@ -73,4 +73,7 @@ async function run() {
     console.log('highestBlockId', highestBlockIdAfter);
 }
 
-run().catch(console.error);
+run().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+});

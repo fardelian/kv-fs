@@ -123,4 +123,7 @@ async function main(): Promise<void> {
     void handlers;
 }
 
-main().catch(console.error);
+main().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+});

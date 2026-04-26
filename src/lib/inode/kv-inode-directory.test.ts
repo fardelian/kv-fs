@@ -8,13 +8,13 @@ const CAPACITY_BYTES = BLOCK_SIZE * 1024;
 
 // On-disk layout constants (mirrored from KvINodeDirectory so the tests
 // can reason about block layout without poking at private fields).
-// 16 bytes inode header (uint64 creation + uint64 modification time)
-// + 4 bytes numEntries.
-const HEADER_BYTES = 20;
+// 24 bytes inode header (1 byte kind + 7 reserved + uint64 creation +
+// uint64 modification time) + 4 bytes numEntries.
+const HEADER_BYTES = 28;
 // 4 bytes per-block entry count + 4 bytes next-block pointer.
 const FOOTER_BYTES = 8;
 const ENTRY_OVERHEAD_BYTES = 6; // 2 (uint16 length) + 4 (uint32 iNodeId)
-const FIRST_BLOCK_ENTRY_AREA = BLOCK_SIZE - HEADER_BYTES - FOOTER_BYTES; // 4068
+const FIRST_BLOCK_ENTRY_AREA = BLOCK_SIZE - HEADER_BYTES - FOOTER_BYTES; // 4060
 const CONTINUATION_BLOCK_ENTRY_AREA = BLOCK_SIZE - FOOTER_BYTES; // 4088
 
 /** How many bytes a single entry consumes on disk for a name of `nameLength` UTF-8 bytes. */

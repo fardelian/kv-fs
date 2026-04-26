@@ -61,6 +61,10 @@ export class KvFilesystemEasy {
             }
         }
 
+        if (await directory.hasEntry(leaf)) {
+            throw new KvError_FS_Exists(`Directory entry "${pathName}" already exists.`);
+        }
+
         return await this.filesystem.createDirectory(leaf, directory);
     }
 

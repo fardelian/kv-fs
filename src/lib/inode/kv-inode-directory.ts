@@ -1,4 +1,4 @@
-import { INode, INodeId } from './helpers/kv-inode';
+import { INode, INodeId, KV_INODE_KIND_DIRECTORY } from './helpers/kv-inode';
 import { KvBlockDevice } from '../block-devices';
 import { Init, dataView, utf8Decode, utf8Encode, KvError_FS_NotFound, KvError_INode_NameOverflow } from '../utils';
 
@@ -41,8 +41,13 @@ type DirectoryEntriesList = Map<string, INodeId>;
 export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     /** Names are at most 16 bits' worth of UTF-8 bytes. Practical limit is also bounded by block size. */
     public static readonly MAX_NAME_LENGTH = 0xFFFF;
-    public static readonly OFFSET_NUM_ENTRIES = INode.HEADER_SIZE; // 16
-    public static readonly OFFSET_FIRST_ENTRY = INode.HEADER_SIZE + 4; // 20
+    public static readonly OFFSET_NUM_ENTRIES = INode.HEADER_SIZE; // 24
+    public static readonly OFFSET_FIRST_ENTRY = INode.HEADER_SIZE + 4; // 28
+
+    public override get kind(): number {
+        return KV_INODE_KIND_DIRECTORY;
+    }
+
     /** Per-entry overhead: 2 bytes for `uint16` name length + 4 bytes for `uint32` iNodeId. */
     public static readonly ENTRY_OVERHEAD_BYTES = 2 + 4;
     /** Last 8 bytes of every block: 4 bytes per-block entry count + 4 bytes next-block pointer. */
@@ -165,6 +170,7 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
 
             let offset: number;
             if (blockIdx === 0) {
+                view.setUint8(INode.OFFSET_KIND, KV_INODE_KIND_DIRECTORY);
                 view.setBigUint64(INode.OFFSET_CREATION_TIME, BigInt(this.creationTime.getTime()));
                 view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, BigInt(this.modificationTime.getTime()));
                 view.setUint32(KvINodeDirectory.OFFSET_NUM_ENTRIES, this.entries.size);
@@ -228,6 +234,7 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
         const now = BigInt(Date.now());
+        view.setUint8(INode.OFFSET_KIND, KV_INODE_KIND_DIRECTORY);
         view.setBigUint64(INode.OFFSET_CREATION_TIME, now);
         view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, now);
         view.setUint32(KvINodeDirectory.OFFSET_NUM_ENTRIES, 0);

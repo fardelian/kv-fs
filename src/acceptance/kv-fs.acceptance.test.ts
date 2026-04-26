@@ -74,7 +74,7 @@ describe('kv-fs (acceptance)', () => {
         await fs.createDirectory('/tmp', true);
 
         const path = '/tmp/disposable.txt';
-        await fs.createDirectory(path);
+        await fs.createFile(path);
         await fs.writeFile(path, encoder.encode('temporary'));
 
         expect(decoder.decode(await fs.readFile(path))).toBe('temporary');

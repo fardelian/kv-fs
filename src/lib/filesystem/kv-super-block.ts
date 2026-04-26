@@ -32,8 +32,12 @@ export class SuperBlock {
      *     inode block (4 bytes), shrinking the inline direct-block area by
      *     one slot but enabling files larger than what fits in a single
      *     inode's pointer list.
+     * v4: inode header gains a 1-byte `kind` discriminator at offset 0
+     *     (0 = directory, 1 = file) plus 7 reserved bytes, growing the
+     *     header from 16 to 24 bytes. Lets KvINodeFile / KvINodeDirectory
+     *     reject opening the wrong kind of inode at init time.
      */
-    public static readonly FORMAT_VERSION = 3;
+    public static readonly FORMAT_VERSION = 4;
 
     public static readonly OFFSET_FORMAT_VERSION = 0;
     public static readonly OFFSET_CAPACITY_BYTES = 4;

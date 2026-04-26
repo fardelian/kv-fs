@@ -1,4 +1,4 @@
-import { INode, INodeId } from './helpers/kv-inode';
+import { INode, INodeId, KV_INODE_KIND_FILE } from './helpers/kv-inode';
 import { KvBlockDevice } from '../block-devices';
 import { Init, dataView } from '../utils';
 
@@ -21,11 +21,15 @@ import { Init, dataView } from '../utils';
  * file size before doubly-indirect (a future step) becomes necessary.
  */
 export class KvINodeFile extends INode<Uint8Array> {
-    public static readonly OFFSET_SIZE = INode.HEADER_SIZE; // 16
-    public static readonly OFFSET_DATA_BLOCK_IDS = INode.HEADER_SIZE + 8; // 24
+    public static readonly OFFSET_SIZE = INode.HEADER_SIZE; // 24
+    public static readonly OFFSET_DATA_BLOCK_IDS = INode.HEADER_SIZE + 8; // 32
     public static readonly DATA_BLOCK_ID_SIZE = 4;
     public static readonly INDIRECT_FOOTER_BYTES = 4;
     public static readonly NO_BLOCK = 0xFFFFFFFF;
+
+    public override get kind(): number {
+        return KV_INODE_KIND_FILE;
+    }
 
     public size = 0;
 
@@ -294,6 +298,7 @@ export class KvINodeFile extends INode<Uint8Array> {
         // Inode block: header + size + direct ids + indirect pointer.
         const buffer = new Uint8Array(blockSize);
         const view = dataView(buffer);
+        view.setUint8(INode.OFFSET_KIND, KV_INODE_KIND_FILE);
         view.setBigUint64(INode.OFFSET_CREATION_TIME, BigInt(this.creationTime.getTime()));
         view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, BigInt(this.modificationTime.getTime()));
         view.setBigUint64(KvINodeFile.OFFSET_SIZE, BigInt(this.size));
@@ -330,6 +335,7 @@ export class KvINodeFile extends INode<Uint8Array> {
 
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);
+        view.setUint8(INode.OFFSET_KIND, KV_INODE_KIND_FILE);
         view.setBigUint64(INode.OFFSET_CREATION_TIME, BigInt(creationTime.getTime()));
         view.setBigUint64(INode.OFFSET_MODIFICATION_TIME, BigInt(modificationTime.getTime()));
         view.setBigUint64(KvINodeFile.OFFSET_SIZE, 0n);

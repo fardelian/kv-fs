@@ -1,4 +1,4 @@
-import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvBlockDeviceMemory } from '../lib/block-devices';
 
 const BLOCK_SIZE = 4096;
@@ -15,7 +15,7 @@ async function run() {
 
     const memoryBlockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
 
-    // Create file system and wrap it with KvFilesystemEasy to simplify access
+    // Create file system and wrap it with KvFilesystemSimple to simplify access
 
     const fileSystem = await KvFilesystem.format(
         memoryBlockDevice,
@@ -24,7 +24,7 @@ async function run() {
         SUPER_BLOCK_ID,
     );
 
-    const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
+    const easyFileSystem = new KvFilesystemSimple(fileSystem, '/');
 
     // Create test files
 

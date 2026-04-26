@@ -1,4 +1,4 @@
-import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { mkdirSync } from 'fs';
 import { AsyncDatabase } from 'promised-sqlite3';
@@ -38,7 +38,7 @@ async function run() {
     }
 
     const fileSystem = new KvFilesystem(sqliteBlockDevice, SUPER_BLOCK_ID);
-    const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
+    const easyFileSystem = new KvFilesystemSimple(fileSystem, '/');
 
     // Create test files
 

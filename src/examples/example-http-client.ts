@@ -1,4 +1,4 @@
-import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvBlockDeviceHttpClient, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvEncryptionPassword } from '../lib/encryption';
 
@@ -30,7 +30,7 @@ async function run() {
     await KvFilesystem.format(clientBlockDevice, TOTAL_INODES);
 
     const fileSystem = new KvFilesystem(clientBlockDevice, SUPER_BLOCK_ID);
-    const easyFileSystem = new KvFilesystemEasy(fileSystem, '/');
+    const easyFileSystem = new KvFilesystemSimple(fileSystem, '/');
 
     // Create test files
 

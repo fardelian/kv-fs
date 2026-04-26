@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'test-globals';
 import { KvBlockDeviceMemory } from '../block-devices';
-import { KvFilesystem, KvFilesystemEasy } from '../filesystem';
+import { KvFilesystem, KvFilesystemSimple } from '../filesystem';
 import { KvFuseError, KvFuseHandlers } from './kv-fuse-handlers';
 
 const BLOCK_SIZE = 4096;
@@ -9,12 +9,12 @@ const TOTAL_INODES = 64;
 const SUPER_BLOCK_ID = 0;
 
 async function makeHandlers(): Promise<{
-    fs: KvFilesystemEasy;
+    fs: KvFilesystemSimple;
     handlers: KvFuseHandlers;
 }> {
     const device = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     await KvFilesystem.format(device, TOTAL_INODES);
-    const fs = new KvFilesystemEasy(new KvFilesystem(device, SUPER_BLOCK_ID), '/');
+    const fs = new KvFilesystemSimple(new KvFilesystem(device, SUPER_BLOCK_ID), '/');
     return { fs, handlers: new KvFuseHandlers(fs, BLOCK_SIZE) };
 }
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'test-globals';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvEncryptionAES256GCMKey } from '../lib/encryption';
-import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 
 const SUPER_BLOCK_ID = 0;
 
@@ -14,7 +14,7 @@ interface FsOptions {
 }
 
 async function makeFs(opts: FsOptions = {}): Promise<{
-    fs: KvFilesystemEasy;
+    fs: KvFilesystemSimple;
     raw: KvBlockDeviceMemory;
 }> {
     const blockSize = opts.blockSize ?? 4096;
@@ -30,7 +30,7 @@ async function makeFs(opts: FsOptions = {}): Promise<{
         : raw;
 
     await KvFilesystem.format(device, inodes);
-    const fs = new KvFilesystemEasy(new KvFilesystem(device, SUPER_BLOCK_ID), '/');
+    const fs = new KvFilesystemSimple(new KvFilesystem(device, SUPER_BLOCK_ID), '/');
     return { fs, raw };
 }
 
@@ -216,7 +216,7 @@ describe('kv-fs (thorough acceptance)', () => {
 
             // First mount: build out a small tree.
             {
-                const fs = new KvFilesystemEasy(new KvFilesystem(raw, SUPER_BLOCK_ID), '/');
+                const fs = new KvFilesystemSimple(new KvFilesystem(raw, SUPER_BLOCK_ID), '/');
                 await fs.createDirectory('/users/alice', true);
                 await fs.createDirectory('/users/bob', true);
                 await fs.createDirectory('/var/log', true);
@@ -234,7 +234,7 @@ describe('kv-fs (thorough acceptance)', () => {
             }
 
             // Second mount: reopen, read everything.
-            const fs2 = new KvFilesystemEasy(new KvFilesystem(raw, SUPER_BLOCK_ID), '/');
+            const fs2 = new KvFilesystemSimple(new KvFilesystem(raw, SUPER_BLOCK_ID), '/');
 
             const aliceFiles = await fs2.readDirectory('/users/alice');
             expect(aliceFiles.length).toBe(30);

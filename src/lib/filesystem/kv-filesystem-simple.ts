@@ -9,7 +9,7 @@ import { KvError_FS_Exists } from '../utils';
  *
  * The separator defaults to `/` and is configurable.
  */
-export class KvFilesystemEasy {
+export class KvFilesystemSimple {
     private readonly filesystem: KvFilesystem;
     private readonly separator;
 

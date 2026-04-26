@@ -18,7 +18,7 @@ It is a pet project. It is almost certainly full of bugs. Do not trust it with a
     - [`KvEncryptionPassword`](src/lib/encryption/kv-encryption-password.ts) — derives an AES-256-CBC key from a password via PBKDF2.
     - [`KvEncryptionRot13`](src/lib/encryption/kv-encryption-rot13.ts) — for entertainment value (don't @ me).
 - [**`KvFilesystem`**](src/lib/filesystem/kv-filesystem.ts) — superblock, inodes ([file](src/lib/inode/kv-inode-file.ts) + [directory](src/lib/inode/kv-inode-directory.ts)), block allocation, format. Layered on top of any block device.
-- [**`KvFilesystemEasy`**](src/lib/filesystem/kv-filesystem-easy.ts) — path-style helpers (`createFile('/home/florin/note.txt')`, `readDirectory('/')`) so callers don't have to thread inodes around.
+- [**`KvFilesystemSimple`**](src/lib/filesystem/kv-filesystem-simple.ts) — path-style helpers (`createFile('/home/florin/note.txt')`, `readDirectory('/')`) so callers don't have to thread inodes around.
 
 ## How it works
 
@@ -111,7 +111,7 @@ The filesystem itself is built out of those same blocks:
 
 That's the whole model. Reading a directory means reading its inode block and following the next-block pointer through any continuation blocks until enough entries have been collected. Opening a file by path means walking from the root directory through `(name, inode-id)` lookups until you reach the file's inode. Reading the file means following its data-block list and concatenating.
 
-`KvFilesystemEasy` is a thin convenience layer on top — it walks paths for you so callers don't have to resolve each path component by hand.
+`KvFilesystemSimple` is a thin convenience layer on top — it walks paths for you so callers don't have to resolve each path component by hand.
 
 ### Files have a position
 

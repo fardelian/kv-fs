@@ -1,18 +1,18 @@
 import { describe, it, expect } from 'test-globals';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory } from '../lib/block-devices';
-import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
 const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
-async function makeFs(): Promise<KvFilesystemEasy> {
+async function makeFs(): Promise<KvFilesystemSimple> {
     const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     await KvFilesystem.format(blockDevice, TOTAL_INODES);
     const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
-    return new KvFilesystemEasy(filesystem, '/');
+    return new KvFilesystemSimple(filesystem, '/');
 }
 
 const encoder = new TextEncoder();
@@ -119,7 +119,7 @@ describe('kv-fs (acceptance)', () => {
         // First "mount": create a directory with enough entries to require
         // continuation blocks, then walk away.
         {
-            const fs = new KvFilesystemEasy(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
+            const fs = new KvFilesystemSimple(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
             await fs.createDirectory('/persist', true);
             for (let i = 0; i < 30; i++) {
                 const file = await fs.createFile(`/persist/note-${i}.txt`);
@@ -130,7 +130,7 @@ describe('kv-fs (acceptance)', () => {
         // Second "mount": fresh KvFilesystem against the same blocks. The
         // chained directory must be readable end-to-end — the chain pointer
         // and total entry count round-trip through disk.
-        const fs2 = new KvFilesystemEasy(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
+        const fs2 = new KvFilesystemSimple(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
         const listing = await fs2.readDirectory('/persist');
         expect(listing.length).toBe(30);
 
@@ -143,7 +143,7 @@ describe('kv-fs (acceptance)', () => {
     it('shrinks a chained directory back to a single block after enough unlinks', async () => {
         const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
         await KvFilesystem.format(blockDevice, TOTAL_INODES);
-        const fs = new KvFilesystemEasy(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
+        const fs = new KvFilesystemSimple(new KvFilesystem(blockDevice, SUPER_BLOCK_ID), '/');
 
         await fs.createDirectory('/shrink', true);
         // Grow to 40 entries, forcing continuation blocks.
@@ -180,7 +180,7 @@ describe('kv-fs (acceptance)', () => {
 
         // Creating real content should push the high-water mark up further.
         const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
-        const fs = new KvFilesystemEasy(filesystem, '/');
+        const fs = new KvFilesystemSimple(filesystem, '/');
         await fs.createDirectory('/data', true);
         const file = await fs.createFile('/data/note.txt');
         await file.write(encoder.encode(faker.lorem.paragraph()));

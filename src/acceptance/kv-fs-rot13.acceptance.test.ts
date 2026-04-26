@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'test-globals';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory, KvEncryptedBlockDevice } from '../lib/block-devices';
-import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvEncryptionRot13 } from '../lib/encryption';
 
 const BLOCK_SIZE = 4096;
@@ -9,12 +9,12 @@ const TOTAL_BLOCKS = 1000;
 const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
-async function makeRot13Fs(): Promise<{ fs: KvFilesystemEasy; underlying: KvBlockDeviceMemory }> {
+async function makeRot13Fs(): Promise<{ fs: KvFilesystemSimple; underlying: KvBlockDeviceMemory }> {
     const underlying = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     const encrypted = new KvEncryptedBlockDevice(underlying, new KvEncryptionRot13());
     await KvFilesystem.format(encrypted, TOTAL_INODES);
     const filesystem = new KvFilesystem(encrypted, SUPER_BLOCK_ID);
-    return { fs: new KvFilesystemEasy(filesystem, '/'), underlying };
+    return { fs: new KvFilesystemSimple(filesystem, '/'), underlying };
 }
 
 /** Search every block of an in-memory device for the given byte sequence. */

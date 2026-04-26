@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'test-globals';
 import { KvBlockDeviceMemory } from '../block-devices';
-import { KvFilesystem, KvFilesystemEasy } from '.';
+import { KvFilesystem, KvFilesystemSimple } from '.';
 import { KvError_FS_Exists, KvError_FS_NotFound } from '../utils';
 
 const BLOCK_SIZE = 4096;
@@ -8,16 +8,16 @@ const TOTAL_BLOCKS = 256;
 const TOTAL_INODES = 64;
 const SUPER_BLOCK_ID = 0;
 
-async function makeFs(separator?: string): Promise<KvFilesystemEasy> {
+async function makeFs(separator?: string): Promise<KvFilesystemSimple> {
     const device = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     await KvFilesystem.format(device, TOTAL_INODES);
     const filesystem = new KvFilesystem(device, SUPER_BLOCK_ID);
     return separator === undefined
-        ? new KvFilesystemEasy(filesystem)
-        : new KvFilesystemEasy(filesystem, separator);
+        ? new KvFilesystemSimple(filesystem)
+        : new KvFilesystemSimple(filesystem, separator);
 }
 
-describe('KvFilesystemEasy', () => {
+describe('KvFilesystemSimple', () => {
     describe('constructor', () => {
         it('defaults the separator to "/" when none is supplied', async () => {
             const fs = await makeFs();

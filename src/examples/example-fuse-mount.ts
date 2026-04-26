@@ -17,7 +17,7 @@
  * them change per binding.
  */
 import { KvBlockDeviceMemory } from '../lib/block-devices';
-import { KvFilesystem, KvFilesystemEasy } from '../lib/filesystem';
+import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvFuseError, KvFuseHandlers } from '../lib/fuse';
 
 const BLOCK_SIZE = 4096;
@@ -27,7 +27,7 @@ const TOTAL_INODES = 256;
 async function buildHandlers(): Promise<KvFuseHandlers> {
     const device = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
     await KvFilesystem.format(device, TOTAL_INODES);
-    const fs = new KvFilesystemEasy(new KvFilesystem(device, 0), '/');
+    const fs = new KvFilesystemSimple(new KvFilesystem(device, 0), '/');
     return new KvFuseHandlers(fs, BLOCK_SIZE);
 }
 

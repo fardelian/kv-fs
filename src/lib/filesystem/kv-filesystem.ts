@@ -6,7 +6,7 @@ import { Init } from '../utils';
 /**
  * Core filesystem: walks the superblock + inode tree on top of any
  * `KvBlockDevice`. Operations take an explicit parent directory; for
- * the path-walking facade see `KvFilesystemEasy`.
+ * the path-walking facade see `KvFilesystemSimple`.
  */
 export class KvFilesystem {
     private blockDevice: KvBlockDevice;

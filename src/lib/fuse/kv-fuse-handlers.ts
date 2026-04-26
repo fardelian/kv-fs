@@ -1,4 +1,4 @@
-import { KvFilesystemEasy } from '../filesystem';
+import { KvFilesystemSimple } from '../filesystem';
 import { KvError_INode_KindMismatch, KvINodeFile } from '../inode';
 import { KvError_FS_Exists, KvError_FS_NotFound } from '../utils';
 
@@ -54,7 +54,7 @@ export type KvFuseErrorCode
         | 'EIO';
 
 /**
- * Filesystem-level adapter from `KvFilesystemEasy` to FUSE-shape
+ * Filesystem-level adapter from `KvFilesystemSimple` to FUSE-shape
  * callbacks. Pure async API — the actual FUSE library binding (e.g.
  * `fuse-native` on Linux/macOS, `winfsp` on Windows) wraps each method
  * in its own callback shape at the boundary.
@@ -73,12 +73,12 @@ export type KvFuseErrorCode
  * - `getattr` returns synthetic mode/uid/gid since we don't track those.
  */
 export class KvFuseHandlers {
-    private readonly fs: KvFilesystemEasy;
+    private readonly fs: KvFilesystemSimple;
     private readonly openFiles = new Map<number, { path: string; file: KvINodeFile }>();
     private nextFh = 1;
     private readonly blockSize: number;
 
-    constructor(fs: KvFilesystemEasy, blockSize = 4096) {
+    constructor(fs: KvFilesystemSimple, blockSize = 4096) {
         this.fs = fs;
         this.blockSize = blockSize;
     }

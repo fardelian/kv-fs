@@ -52,6 +52,37 @@ export class KvEncryptedBlockDevice extends KvBlockDevice {
         await this.blockDevice.writeBlock(blockId, encryptedData);
     }
 
+    /**
+     * Encryption hides the per-byte structure underneath, so a partial
+     * read can't be served from a partial fetch — we must decrypt the
+     * whole block and slice in plaintext. Same total work as the base
+     * default; overridden here only to make the dependency on full-block
+     * decryption explicit.
+     */
+    public async readBlockPartial(blockId: INodeId, start: number, end: number): Promise<Uint8Array> {
+        if (end <= start) return new Uint8Array(0);
+        const plaintext = await this.readBlock(blockId);
+        return plaintext.slice(start, end);
+    }
+
+    /**
+     * Read-modify-write the whole plaintext block: decrypt the existing
+     * one, splice `data` in at `offset`, re-encrypt, write it back. A
+     * partial-write at this layer always touches the entire underlying
+     * encrypted block — encryption schemes here aren't byte-addressable.
+     */
+    public async writeBlockPartial(blockId: INodeId, offset: number, data: Uint8Array): Promise<void> {
+        if (data.length === 0) return;
+        if (offset + data.length > this.getBlockSize()) {
+            throw new KvError_BD_Overflow(offset + data.length, this.getBlockSize());
+        }
+        const plaintext = await this.readBlock(blockId);
+        const next = new Uint8Array(this.getBlockSize());
+        next.set(plaintext);
+        next.set(data, offset);
+        await this.writeBlock(blockId, next);
+    }
+
     public async freeBlock(blockId: INodeId): Promise<void> {
         await this.blockDevice.freeBlock(blockId);
     }

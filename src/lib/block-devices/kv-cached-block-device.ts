@@ -68,6 +68,37 @@ export class KvCachedBlockDevice extends KvBlockDevice {
         this.cache.delete(blockId);
     }
 
+    /**
+     * Partial read can satisfy from cache when the whole block is
+     * already there; otherwise pass through to the inner device. We
+     * deliberately don't promote a partial read to a full-block fetch
+     * here — that would amplify cold reads that only wanted a few
+     * bytes.
+     */
+    public async readBlockPartial(blockId: INodeId, start: number, end: number): Promise<Uint8Array> {
+        if (end <= start) return new Uint8Array(0);
+        const cached = this.cache.get(blockId);
+        if (cached !== undefined) {
+            // Refresh LRU position.
+            this.cache.delete(blockId);
+            this.cache.set(blockId, cached);
+            return cached.slice(start, end);
+        }
+        return await this.inner.readBlockPartial(blockId, start, end);
+    }
+
+    /**
+     * Partial write invalidates the cache entry just like a full
+     * write — the post-write block contents depend on the inner
+     * device's stored bytes plus the splice, and we'd rather refetch
+     * than try to splice in the cached copy and risk drift if the
+     * inner device pads / mutates differently.
+     */
+    public async writeBlockPartial(blockId: INodeId, offset: number, data: Uint8Array): Promise<void> {
+        await this.inner.writeBlockPartial(blockId, offset, data);
+        this.cache.delete(blockId);
+    }
+
     public async freeBlock(blockId: INodeId): Promise<void> {
         this.cache.delete(blockId);
         await this.inner.freeBlock(blockId);

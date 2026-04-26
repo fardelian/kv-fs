@@ -38,6 +38,36 @@ export class KvBlockDeviceMemory extends KvBlockDevice {
         this.blocks[blockId] = blockData;
     }
 
+    /**
+     * In-memory slice of the stored buffer. Allocates a fresh
+     * Uint8Array so callers can mutate the result without affecting
+     * the stored block (consistent with the rest of the device's API).
+     */
+    public async readBlockPartial(blockId: INodeId, start: number, end: number): Promise<Uint8Array> {
+        if (end <= start) return new Uint8Array(0);
+        const block = this.blocks[blockId];
+        if (block === undefined) {
+            throw new KvError_BD_NotFound(`Block "${blockId}" not found.`);
+        }
+        return block.slice(start, end);
+    }
+
+    /**
+     * In-place splice into the stored buffer. The block must already
+     * exist; partial-write does not allocate.
+     */
+    public async writeBlockPartial(blockId: INodeId, offset: number, data: Uint8Array): Promise<void> {
+        if (data.length === 0) return;
+        if (offset + data.length > this.getBlockSize()) {
+            throw new KvError_BD_Overflow(offset + data.length, this.getBlockSize());
+        }
+        const block = this.blocks[blockId];
+        if (block === undefined) {
+            throw new KvError_BD_NotFound(`Block "${blockId}" not found.`);
+        }
+        block.set(data, offset);
+    }
+
     public async freeBlock(blockId: INodeId): Promise<void> {
         this.blocks[blockId] = undefined;
         // Trim trailing empties so `getHighestBlockId` is `length - 1`.

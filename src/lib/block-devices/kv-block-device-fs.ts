@@ -40,6 +40,41 @@ export class KvBlockDeviceFs extends KvBlockDevice {
         await fs.writeFile(this.getBlockPath(blockId), blockData);
     }
 
+    /**
+     * Read `[start, end)` directly from the block file via a positioned
+     * `fd.read`, so only the requested bytes leave disk. Avoids the
+     * default's "read whole block, slice in memory" round trip.
+     */
+    public async readBlockPartial(blockId: INodeId, start: number, end: number): Promise<Uint8Array> {
+        if (end <= start) return new Uint8Array(0);
+        const fd = await fs.open(this.getBlockPath(blockId), 'r');
+        try {
+            const buffer = new Uint8Array(end - start);
+            await fd.read(buffer, 0, buffer.length, start);
+            return buffer;
+        } finally {
+            await fd.close();
+        }
+    }
+
+    /**
+     * Splice `data` into the block file at byte `offset` via a
+     * positioned `fd.write`. Surrounding bytes stay on disk untouched —
+     * no read-modify-write needed.
+     */
+    public async writeBlockPartial(blockId: INodeId, offset: number, data: Uint8Array): Promise<void> {
+        if (data.length === 0) return;
+        if (offset + data.length > this.getBlockSize()) {
+            throw new KvError_BD_Overflow(offset + data.length, this.getBlockSize());
+        }
+        const fd = await fs.open(this.getBlockPath(blockId), 'r+');
+        try {
+            await fd.write(data, 0, data.length, offset);
+        } finally {
+            await fd.close();
+        }
+    }
+
     public async freeBlock(blockId: INodeId): Promise<void> {
         await fs.unlink(this.getBlockPath(blockId));
     }

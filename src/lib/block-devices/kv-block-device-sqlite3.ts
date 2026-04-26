@@ -1,12 +1,14 @@
 import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
 import { AsyncDatabase } from 'promised-sqlite3';
-import { Init, KvError_BD_NotFound } from '../utils';
+import { Init, KvError_BD_NotFound, KvError_BD_Overflow } from '../utils';
 
 /**
  * `KvBlockDevice` backed by a SQLite3 table. One row per block, keyed
- * by integer ID. Stores blocks verbatim (no zero-padding); call sites
- * relying on full-block reads should pad before write.
+ * by integer ID. Short writes are zero-padded up to `blockSize` so the
+ * stored BLOB matches the device's contract that every read returns
+ * exactly `blockSize` bytes — same behaviour as the in-memory and FS
+ * backends.
  */
 export class KvBlockDeviceSqlite3 extends KvBlockDevice {
     /**
@@ -62,12 +64,66 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
 
     @Init
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
-        // sqlite3 expects a Buffer for BLOB params; wrap as a zero-copy view.
-        const blob = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+        if (data.length > this.getBlockSize()) {
+            throw new KvError_BD_Overflow(data.length, this.getBlockSize());
+        }
+        // Zero-pad short writes up to blockSize so reads always return
+        // exactly `blockSize` bytes — matching the FS / memory backends.
+        const padded = new Uint8Array(this.getBlockSize());
+        padded.set(data);
+        const blob = Buffer.from(padded.buffer, padded.byteOffset, padded.byteLength);
         await this.database.run(
             `INSERT OR REPLACE INTO ${this.tableName} (id, data) VALUES (?, ?)`,
             blockId,
             blob,
+        );
+    }
+
+    /**
+     * Read `[start, end)` from the block via SQLite's `substr` so only
+     * the requested bytes leave the database (BLOBs are 1-indexed and
+     * `substr(blob, start, length)`-shaped).
+     */
+    @Init
+    public async readBlockPartial(blockId: INodeId, start: number, end: number): Promise<Uint8Array> {
+        if (end <= start) return new Uint8Array(0);
+        const length = end - start;
+        const row = await this.database.get<{ data: ArrayBufferLike } | undefined>(
+            `SELECT substr(data, ?, ?) AS data FROM ${this.tableName} WHERE id = ?`,
+            start + 1,
+            length,
+            blockId,
+        );
+        if (!row) {
+            throw new KvError_BD_NotFound(`Block "${blockId}" not found.`);
+        }
+        return new Uint8Array(row.data);
+    }
+
+    /**
+     * Splice `data` into the existing BLOB at byte `offset` using SQL
+     * concatenation. Faster than read-modify-write at the JS layer for
+     * short writes; SQLite handles the surrounding-bytes preservation.
+     */
+    @Init
+    public async writeBlockPartial(blockId: INodeId, offset: number, data: Uint8Array): Promise<void> {
+        if (data.length === 0) return;
+        if (offset + data.length > this.getBlockSize()) {
+            throw new KvError_BD_Overflow(offset + data.length, this.getBlockSize());
+        }
+        const exists = await this.existsBlock(blockId);
+        if (!exists) {
+            throw new KvError_BD_NotFound(`Block "${blockId}" not found.`);
+        }
+        const blob = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+        // substr(data, 1, offset) keeps the prefix, then the new bytes,
+        // then substr from offset+length+1 onwards keeps the suffix.
+        await this.database.run(
+            `UPDATE ${this.tableName} SET data = substr(data, 1, ?) || ? || substr(data, ?) WHERE id = ?`,
+            offset,
+            blob,
+            offset + data.length + 1,
+            blockId,
         );
     }
 

@@ -248,6 +248,107 @@ describe('KvBlockDeviceHttpClient', () => {
             expect(results[2]).toEqual({ ok: false, error: 'gone' });
             expect(results[3]).toEqual({ ok: false, error: 'unknown error' });
         });
+
+        it('encodes alloc / partial-read / partial-write ops and decodes their results', async () => {
+            mockFetch.mockResolvedValueOnce(metadataResponse());
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                body: {
+                    results: [
+                        { ok: true, blockId: 13 }, // alloc
+                        { ok: true, data: '0102' }, // partial-read
+                        { ok: true }, // partial-write
+                    ],
+                },
+            }));
+
+            const client = new KvBlockDeviceHttpClient(BASE_URL);
+            const results = await client.batch([
+                { op: 'alloc' },
+                { op: 'partial-read', blockId: 5, start: 10, end: 12 },
+                { op: 'partial-write', blockId: 7, offset: 30, data: new Uint8Array([0xff]) },
+            ]);
+
+            const sentBody = JSON.parse(mockFetch.mock.calls[1][1]!.body as string) as {
+                ops: { op: string; blockId?: number; data?: string; start?: number; end?: number; offset?: number }[];
+            };
+            expect(sentBody.ops).toEqual([
+                { op: 'alloc' },
+                { op: 'partial-read', blockId: 5, start: 10, end: 12 },
+                { op: 'partial-write', blockId: 7, offset: 30, data: 'ff' },
+            ]);
+
+            expect(results[0]).toEqual({ ok: true, blockId: 13 });
+            expect(results[1]).toEqual({ ok: true, data: new Uint8Array([0x01, 0x02]) });
+            expect(results[2]).toEqual({ ok: true });
+        });
+    });
+
+    describe('readBlockPartial', () => {
+        it('issues GET /blocks/:id?start=X&end=Y and decodes the raw byte response', async () => {
+            mockFetch.mockResolvedValueOnce(metadataResponse());
+            mockFetch.mockResolvedValueOnce(bytesResponse({ bytes: new Uint8Array([0x10, 0x11, 0x12]) }));
+
+            const client = new KvBlockDeviceHttpClient(BASE_URL);
+            const result = await client.readBlockPartial(7, 100, 103);
+
+            expect(mockFetch).toHaveBeenLastCalledWith(`${BASE_URL}/blocks/7?start=100&end=103`, undefined);
+            expect(Array.from(result)).toEqual([0x10, 0x11, 0x12]);
+        });
+
+        it('returns an empty buffer without hitting the wire when end <= start', async () => {
+            // Single mock for the @Init auto-init; the empty-range path
+            // short-circuits before any HTTP request, so no second mock
+            // is needed.
+            mockFetch.mockResolvedValueOnce(metadataResponse());
+
+            const client = new KvBlockDeviceHttpClient(BASE_URL);
+            const result = await client.readBlockPartial(0, 5, 5);
+
+            expect(result.length).toBe(0);
+            // Exactly one fetch: the @Init auto-init. No partial fetch.
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('writeBlockPartial', () => {
+        it('PUTs /blocks/:id?offset=X with the raw partial data as the body', async () => {
+            mockFetch.mockResolvedValueOnce(metadataResponse());
+            mockFetch.mockResolvedValueOnce(jsonResponse({ status: 204, body: null }));
+
+            const client = new KvBlockDeviceHttpClient(BASE_URL);
+            await client.writeBlockPartial(2, 50, new Uint8Array([0xa, 0xb, 0xc]));
+
+            const [url, init] = mockFetch.mock.calls[1];
+            expect(url).toBe(`${BASE_URL}/blocks/2?offset=50`);
+            const reqInit = init!;
+            expect(reqInit.method).toBe('PUT');
+            expect(reqInit.headers).toEqual({ 'Content-Type': 'application/octet-stream' });
+
+            const body = reqInit.body as Uint8Array;
+            expect(body).toBeInstanceOf(Uint8Array);
+            expect(Array.from(body)).toEqual([0xa, 0xb, 0xc]);
+        });
+
+        it('is a no-op when data is empty', async () => {
+            // Single mock for the @Init auto-init; the empty-data path
+            // short-circuits before any HTTP request.
+            mockFetch.mockResolvedValueOnce(metadataResponse());
+
+            const client = new KvBlockDeviceHttpClient(BASE_URL);
+            await client.writeBlockPartial(0, 0, new Uint8Array(0));
+
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+        });
+
+        it('throws KvError_BD_Overflow when offset + data exceeds blockSize', async () => {
+            mockFetch.mockResolvedValueOnce(metadataResponse());
+
+            const client = new KvBlockDeviceHttpClient(BASE_URL);
+            const oversize = new Uint8Array(SERVER_BLOCK_SIZE);
+
+            await expect(client.writeBlockPartial(0, 1, oversize))
+                .rejects.toBeInstanceOf(KvError_BD_Overflow);
+        });
     });
 
     describe('format', () => {

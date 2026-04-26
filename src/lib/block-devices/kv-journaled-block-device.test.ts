@@ -117,4 +117,38 @@ describe('KvJournaledBlockDevice (CAS / WAL scaffold)', () => {
                 .rejects.toBeInstanceOf(KvError_BD_Overflow);
         });
     });
+
+    describe('partial-read passes through without journaling', () => {
+        it('returns the inner partial slice and leaves the journal untouched', async () => {
+            await journaled.writeBlock(4, new Uint8Array(BLOCK_SIZE).fill(0x33));
+            const recordsBefore = journaled.getRecords().length;
+
+            const slice = await journaled.readBlockPartial(4, 10, 14);
+
+            expect(Array.from(slice)).toEqual([0x33, 0x33, 0x33, 0x33]);
+            // No new record — partial-read isn't a mutation.
+            expect(journaled.getRecords().length).toBe(recordsBefore);
+        });
+    });
+
+    describe('partial-write journals as a write', () => {
+        it('appends a write record and commits it once the inner partial-write completes', async () => {
+            await journaled.writeBlock(2, new Uint8Array(BLOCK_SIZE));
+            const recordsBefore = journaled.getRecords().length;
+
+            await journaled.writeBlockPartial(2, 10, new Uint8Array([0xab, 0xcd]));
+
+            const recordsAfter = journaled.getRecords();
+            expect(recordsAfter.length).toBe(recordsBefore + 1);
+            expect(recordsAfter[recordsAfter.length - 1]).toMatchObject({
+                op: 'write',
+                blockId: 2,
+                committed: true,
+            });
+            // The splice landed on the inner device.
+            const block = await inner.readBlock(2);
+            expect(block[10]).toBe(0xab);
+            expect(block[11]).toBe(0xcd);
+        });
+    });
 });

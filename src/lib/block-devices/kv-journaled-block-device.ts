@@ -111,6 +111,22 @@ export class KvJournaledBlockDevice extends KvBlockDevice {
         await this.markCommitted(seq);
     }
 
+    /** Read passes through; partial reads don't mutate the device. */
+    public async readBlockPartial(blockId: INodeId, start: number, end: number): Promise<Uint8Array> {
+        return await this.inner.readBlockPartial(blockId, start, end);
+    }
+
+    /**
+     * A partial-write is a mutation, so it journals just like a full
+     * write — the record kind stays `'write'` (the POC doesn't store
+     * the bytes anyway, only the fact that block N was mutated).
+     */
+    public async writeBlockPartial(blockId: INodeId, offset: number, data: Uint8Array): Promise<void> {
+        const seq = await this.append('write', blockId);
+        await this.inner.writeBlockPartial(blockId, offset, data);
+        await this.markCommitted(seq);
+    }
+
     public async freeBlock(blockId: INodeId): Promise<void> {
         const seq = await this.append('free', blockId);
         await this.inner.freeBlock(blockId);

@@ -1,17 +1,41 @@
 import { INodeId } from '../../inode';
 
 /**
- * One operation in a batched request. Reads return their bytes in the
- * matching `BatchResult`; writes/frees return only `ok` (true on success
- * or `error` on failure so a single op's failure doesn't drop the rest).
+ * One operation in a batched request. The shape is a discriminated
+ * union — TypeScript narrows `data` / `start` / `end` / `offset` based
+ * on `op`, so the compiler rejects e.g. a `write` op without `data`.
+ *
+ * | op              | extra fields            | result                   |
+ * | --------------- | ----------------------- | ------------------------ |
+ * | `read`          | `blockId`               | `{ data }` (full block)  |
+ * | `write`         | `blockId`, `data`       | `{}`                     |
+ * | `free`          | `blockId`               | `{}`                     |
+ * | `alloc`         | (none)                  | `{ blockId }`            |
+ * | `partial-read`  | `blockId`, `start`, `end` | `{ data }` (sliced)    |
+ * | `partial-write` | `blockId`, `offset`, `data` | `{}`                 |
+ *
+ * Reads return their bytes in the matching `KvBatchResult`; writes /
+ * frees / partial-writes return only `ok` (true on success, or `error`
+ * on failure so a single op's failure doesn't drop the rest of the
+ * batch). `alloc` returns the freshly-allocated block ID.
  */
 export type KvBatchOp
     = { op: 'read'; blockId: INodeId }
         | { op: 'write'; blockId: INodeId; data: Uint8Array }
-        | { op: 'free'; blockId: INodeId };
+        | { op: 'free'; blockId: INodeId }
+        | { op: 'alloc' }
+        | { op: 'partial-read'; blockId: INodeId; start: number; end: number }
+        | { op: 'partial-write'; blockId: INodeId; offset: number; data: Uint8Array };
 
+/**
+ * `data` carries the bytes of a successful (partial-)read; `blockId`
+ * carries the freshly-allocated ID of a successful `alloc`. Both are
+ * absent for write / free / partial-write ops, which only need `ok`.
+ * Loosely typed (both optional) so a single result type covers every
+ * op variant; callers narrow by knowing which op they sent.
+ */
 export type KvBatchResult
-    = { ok: true; data?: Uint8Array }
+    = { ok: true; data?: Uint8Array; blockId?: INodeId }
         | { ok: false; error: string };
 
 /**
@@ -339,6 +363,16 @@ export abstract class KvBlockDevice {
                         break;
                     case 'free':
                         await this.freeBlock(op.blockId);
+                        results.push({ ok: true });
+                        break;
+                    case 'alloc':
+                        results.push({ ok: true, blockId: await this.allocateBlock() });
+                        break;
+                    case 'partial-read':
+                        results.push({ ok: true, data: await this.readBlockPartial(op.blockId, op.start, op.end) });
+                        break;
+                    case 'partial-write':
+                        await this.writeBlockPartial(op.blockId, op.offset, op.data);
                         results.push({ ok: true });
                         break;
                 }

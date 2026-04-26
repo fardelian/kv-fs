@@ -240,6 +240,48 @@ describe('KvBlockDeviceHttpRouter', () => {
             expect(res.body).toEqual({ error: 'Invalid block ID: oops' });
             expect(blockDevice.readBlock).not.toHaveBeenCalled();
         });
+
+        it('routes ?start=X&end=Y to readBlockPartial and serves only the slice', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+            // MockBlockDevice doesn't override readBlockPartial, so the
+            // base default routes through readBlock + slice.
+            const block = new Uint8Array(BLOCK_SIZE);
+            block[10] = 0xa;
+            block[11] = 0xb;
+            block[12] = 0xc;
+            blockDevice.readBlock.mockResolvedValueOnce(block);
+
+            const res = await invoke(fakeRouter, 'GET', '/blocks/:blockId', {
+                params: { blockId: '4' },
+                query: { start: '10', end: '13' },
+            });
+
+            expect(res.contentType).toBe('application/octet-stream');
+            expect(Array.from(res.body as Buffer)).toEqual([0xa, 0xb, 0xc]);
+        });
+
+        it('returns 400 when only one of start / end is supplied', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'GET', '/blocks/:blockId', {
+                params: { blockId: '0' },
+                query: { start: '10' },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'Invalid `start` / `end` query parameters.' });
+        });
+
+        it('returns 400 when start / end are not valid integers', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'GET', '/blocks/:blockId', {
+                params: { blockId: '0' },
+                query: { start: 'oops', end: '20' },
+            });
+
+            expect(res.statusCode).toBe(400);
+        });
     });
 
     describe('PUT /blocks/:blockId (raw write)', () => {
@@ -257,6 +299,37 @@ describe('KvBlockDeviceHttpRouter', () => {
             expect(writtenId).toBe(4);
             expect(Array.from(writtenData)).toEqual([9, 8, 7]);
             expect(res.statusCode).toBe(204);
+        });
+
+        it('routes ?offset=X to writeBlockPartial (read+splice+write under the default impl)', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+            // Base default writeBlockPartial does readBlock → splice → writeBlock.
+            const existing = new Uint8Array(BLOCK_SIZE);
+            blockDevice.readBlock.mockResolvedValueOnce(existing);
+            blockDevice.writeBlock.mockResolvedValueOnce(undefined);
+
+            const res = await invoke(fakeRouter, 'PUT', '/blocks/:blockId', {
+                params: { blockId: '4' },
+                query: { offset: '50' },
+                body: Buffer.from([0xaa, 0xbb]),
+            });
+
+            expect(res.statusCode).toBe(204);
+            const [, written] = blockDevice.writeBlock.mock.calls[0];
+            expect(written[50]).toBe(0xaa);
+            expect(written[51]).toBe(0xbb);
+        });
+
+        it('returns 400 when ?offset is not a valid non-negative integer', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'PUT', '/blocks/:blockId', {
+                params: { blockId: '0' },
+                query: { offset: 'nope' },
+                body: Buffer.from([0]),
+            });
+
+            expect(res.statusCode).toBe(400);
         });
 
         it('returns 400 when the body is missing or not a Buffer', async () => {
@@ -376,6 +449,81 @@ describe('KvBlockDeviceHttpRouter', () => {
 
             expect(res.statusCode).toBe(400);
             expect(res.body).toEqual({ error: 'Unknown op: unknown' });
+        });
+
+        it('runs alloc and surfaces the new blockId', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+            blockDevice.allocateBlock.mockResolvedValueOnce(99);
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'alloc' }] },
+            });
+
+            expect(res.body).toEqual({ results: [{ ok: true, blockId: 99 }] });
+            expect(blockDevice.allocateBlock).toHaveBeenCalledTimes(1);
+        });
+
+        it('runs partial-read and returns hex-encoded slice bytes', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+            // MockBlockDevice routes the base default through readBlock + slice.
+            const block = new Uint8Array(BLOCK_SIZE);
+            block[10] = 0xa;
+            block[11] = 0xb;
+            blockDevice.readBlock.mockResolvedValueOnce(block);
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'partial-read', blockId: 1, start: 10, end: 12 }] },
+            });
+
+            expect(res.body).toEqual({ results: [{ ok: true, data: '0a0b' }] });
+        });
+
+        it('runs partial-write (hex data spliced into the existing block)', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+            blockDevice.readBlock.mockResolvedValueOnce(new Uint8Array(BLOCK_SIZE));
+            blockDevice.writeBlock.mockResolvedValueOnce(undefined);
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'partial-write', blockId: 2, offset: 5, data: 'aabb' }] },
+            });
+
+            expect(res.body).toEqual({ results: [{ ok: true }] });
+            const [, written] = blockDevice.writeBlock.mock.calls[0];
+            expect(written[5]).toBe(0xaa);
+            expect(written[6]).toBe(0xbb);
+        });
+
+        it('returns 400 when partial-read is missing start / end', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'partial-read', blockId: 0 }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'partial-read op requires numeric `start` and `end`.' });
+        });
+
+        it('returns 400 when partial-write is missing offset', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'partial-write', blockId: 0, data: 'aa' }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'partial-write op requires numeric `offset`.' });
+        });
+
+        it('returns 400 when partial-write is missing hex data', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'partial-write', blockId: 0, offset: 0 }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'partial-write op requires hex `data`.' });
         });
     });
 

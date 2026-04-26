@@ -199,4 +199,71 @@ describe('KvCachedBlockDevice', () => {
             expect(inner.readBlock).toHaveBeenCalledTimes(4);
         });
     });
+
+    describe('readBlockPartial', () => {
+        it('returns an empty buffer without touching the inner device when end <= start', async () => {
+            const { inner, cached } = makeDevice();
+
+            const out = await cached.readBlockPartial(0, 5, 5);
+
+            expect(out.length).toBe(0);
+            expect(inner.readBlock).not.toHaveBeenCalled();
+        });
+
+        it('serves the slice from the cache when the whole block is already cached', async () => {
+            const { inner, cached } = makeDevice();
+            const block = bytes(0xab);
+            block[10] = 0x01;
+            block[11] = 0x02;
+            block[12] = 0x03;
+            inner.readBlock.mockResolvedValueOnce(block);
+
+            // Prime the cache via a full read.
+            await cached.readBlock(4);
+            expect(inner.readBlock).toHaveBeenCalledTimes(1);
+
+            const slice = await cached.readBlockPartial(4, 10, 13);
+            expect(Array.from(slice)).toEqual([0x01, 0x02, 0x03]);
+            // No additional inner fetch — the cached copy answered.
+            expect(inner.readBlock).toHaveBeenCalledTimes(1);
+        });
+
+        it('falls through to the inner device on a cache miss without polluting the cache', async () => {
+            const { inner, cached } = makeDevice();
+            // MockBlockDevice doesn't override readBlockPartial, so its
+            // base default routes through readBlock + slice.
+            const block = bytes(0);
+            block[0] = 0x11;
+            block[1] = 0x22;
+            inner.readBlock.mockResolvedValueOnce(block);
+
+            const slice = await cached.readBlockPartial(7, 0, 2);
+
+            expect(Array.from(slice)).toEqual([0x11, 0x22]);
+            expect(inner.readBlock).toHaveBeenCalledWith(7);
+            // The cache must not absorb the inner full-block read — partial
+            // requests shouldn't pollute the LRU.
+            expect(cached.getCacheSize()).toBe(0);
+        });
+    });
+
+    describe('writeBlockPartial', () => {
+        it('passes through to the inner partial write and invalidates the cached entry', async () => {
+            const { inner, cached } = makeDevice();
+            // Prime the cache via a full read.
+            inner.readBlock.mockResolvedValueOnce(bytes(0));
+            await cached.readBlock(2);
+            expect(cached.getCacheSize()).toBe(1);
+
+            // The base default writeBlockPartial does read+splice+write.
+            inner.readBlock.mockResolvedValueOnce(bytes(0));
+            inner.writeBlock.mockResolvedValueOnce(undefined);
+
+            await cached.writeBlockPartial(2, 4, new Uint8Array([1, 2, 3]));
+
+            expect(inner.writeBlock).toHaveBeenCalled();
+            // Cached copy must drop so the next read fetches the post-splice block.
+            expect(cached.getCacheSize()).toBe(0);
+        });
+    });
 });

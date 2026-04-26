@@ -2,15 +2,30 @@ import { KvBatchOp, KvBatchResult, KvBlockDevice, KvBlockDeviceMetadata } from '
 import { INodeId } from '../inode';
 import { Init, KvError_BD_Overflow } from '../utils';
 
-interface WireBatchOp {
-    op: 'read' | 'write' | 'free';
-    blockId: number;
-    data?: string;
-}
+/**
+ * On-the-wire shape of one batch op. Mirrors `KvBatchOp` as a
+ * discriminated union so TypeScript enforces that e.g. a `write` op
+ * always carries `data` and a `partial-read` always carries `start`
+ * + `end`. `data` is hex-encoded for transport because the wire envelope
+ * is JSON.
+ */
+type WireBatchOp
+    = { op: 'read'; blockId: number }
+        | { op: 'write'; blockId: number; data: string }
+        | { op: 'free'; blockId: number }
+        | { op: 'alloc' }
+        | { op: 'partial-read'; blockId: number; start: number; end: number }
+        | { op: 'partial-write'; blockId: number; offset: number; data: string };
 
+/**
+ * On-the-wire shape of one batch result. `data` carries hex-encoded
+ * bytes from a (partial-)read; `blockId` carries the freshly-allocated
+ * ID from an `alloc`. Loose because a single shape covers every op.
+ */
 interface WireBatchResult {
     ok: boolean;
     data?: string;
+    blockId?: number;
     error?: string;
 }
 
@@ -75,6 +90,22 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
         return new Uint8Array(buffer);
     }
 
+    /**
+     * Read a sub-range `[start, end)` from `blockId`. Maps to
+     * `GET /blocks/:blockId?start=X&end=Y`; the server slices server-side
+     * so only the requested bytes cross the wire.
+     */
+    @Init
+    public async readBlockPartial(blockId: INodeId, start: number, end: number): Promise<Uint8Array> {
+        if (end <= start) {
+            return new Uint8Array(0);
+        }
+        const url = `${this.getBlockUrl(blockId)}?start=${start}&end=${end}`;
+        const res = await this.request(url);
+        const buffer = await res.arrayBuffer();
+        return new Uint8Array(buffer);
+    }
+
     /** Write using PUT /blocks/:blockId. Body is raw bytes, padded to blockSize. */
     @Init
     public async writeBlock(blockId: INodeId, data: Uint8Array): Promise<void> {
@@ -91,6 +122,30 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
             headers: { 'Content-Type': 'application/octet-stream' },
             // `body` accepts BodyInit; Uint8Array is one of its valid forms.
             body: blockData,
+        });
+    }
+
+    /**
+     * Splice `data` into `blockId` starting at `offset`. Maps to
+     * `PUT /blocks/:blockId?offset=X` with `data` as the raw body; the
+     * server preserves the bytes outside `[offset, offset+data.length)`.
+     */
+    @Init
+    public async writeBlockPartial(blockId: INodeId, offset: number, data: Uint8Array): Promise<void> {
+        if (data.length === 0) return;
+        if (offset + data.length > this.getBlockSize()) {
+            throw new KvError_BD_Overflow(offset + data.length, this.getBlockSize());
+        }
+
+        // Copy into a fresh Uint8Array<ArrayBuffer> so the BodyInit
+        // signature accepts it (the caller's Uint8Array may be backed by
+        // an ArrayBufferLike, which fetch's BodyInit refuses).
+        const body = new Uint8Array(data);
+        const url = `${this.getBlockUrl(blockId)}?offset=${offset}`;
+        await this.request(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body,
         });
     }
 
@@ -139,11 +194,21 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
      */
     @Init
     public async batch(ops: KvBatchOp[]): Promise<KvBatchResult[]> {
-        const wireOps: WireBatchOp[] = ops.map((o) => {
-            if (o.op === 'write') {
-                return { op: 'write', blockId: o.blockId, data: hexEncode(o.data) };
+        const wireOps: WireBatchOp[] = ops.map((o): WireBatchOp => {
+            switch (o.op) {
+                case 'read':
+                    return { op: 'read', blockId: o.blockId };
+                case 'write':
+                    return { op: 'write', blockId: o.blockId, data: hexEncode(o.data) };
+                case 'free':
+                    return { op: 'free', blockId: o.blockId };
+                case 'alloc':
+                    return { op: 'alloc' };
+                case 'partial-read':
+                    return { op: 'partial-read', blockId: o.blockId, start: o.start, end: o.end };
+                case 'partial-write':
+                    return { op: 'partial-write', blockId: o.blockId, offset: o.offset, data: hexEncode(o.data) };
             }
-            return { op: o.op, blockId: o.blockId };
         });
 
         const res = await this.request(`${this.baseUrl}/blocks/batch`, {
@@ -157,10 +222,10 @@ export class KvBlockDeviceHttpClient extends KvBlockDevice {
             if (!r.ok) {
                 return { ok: false, error: r.error ?? 'unknown error' };
             }
-            if (r.data !== undefined) {
-                return { ok: true, data: hexDecode(r.data) };
-            }
-            return { ok: true };
+            const result: { ok: true; data?: Uint8Array; blockId?: INodeId } = { ok: true };
+            if (r.data !== undefined) result.data = hexDecode(r.data);
+            if (r.blockId !== undefined) result.blockId = r.blockId;
+            return result;
         });
     }
 

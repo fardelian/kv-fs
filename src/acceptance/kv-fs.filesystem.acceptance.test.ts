@@ -217,4 +217,76 @@ describe('kv-fs (acceptance)', () => {
 
         expect(await blockDevice.getHighestBlockId()).toBeGreaterThan(highestAfterFormat);
     });
+
+    it('readPartial / writePartial: byte-addressable I/O without touching position', async () => {
+        const fs = await makeFs();
+        await fs.createDirectory('/data', true);
+
+        const file = await fs.createFile('/data/buffer.bin');
+        // Lay down a 1.5-block-sized payload so partial ops cross block
+        // boundaries and exercise the per-block dispatch in readPartial /
+        // writePartial.
+        const total = Math.floor(BLOCK_SIZE * 1.5);
+        const payload = new Uint8Array(total);
+        for (let i = 0; i < total; i++) payload[i] = i & 0xff;
+        await file.write(payload);
+        const positionAfterWrite = file.getPos();
+
+        // readPartial pulls a slice that straddles the block boundary
+        // and leaves the cursor where write() left it.
+        const slice = await file.readPartial(BLOCK_SIZE - 8, 32);
+        expect(slice.length).toBe(32);
+        for (let i = 0; i < 32; i++) {
+            expect(slice[i]).toBe((BLOCK_SIZE - 8 + i) & 0xff);
+        }
+        expect(file.getPos()).toBe(positionAfterWrite);
+
+        // writePartial splices a fixed pattern over the same range and
+        // (again) leaves the cursor untouched.
+        const patch = new Uint8Array(32);
+        patch.fill(0xab);
+        await file.writePartial(BLOCK_SIZE - 8, patch);
+        expect(file.getPos()).toBe(positionAfterWrite);
+
+        // Verify the splice via a fresh full read.
+        await file.setPos(0);
+        const after = await file.read();
+        expect(after.length).toBe(total);
+        for (let i = 0; i < BLOCK_SIZE - 8; i++) {
+            expect(after[i]).toBe(i & 0xff);
+        }
+        for (let i = BLOCK_SIZE - 8; i < BLOCK_SIZE - 8 + 32; i++) {
+            expect(after[i]).toBe(0xab);
+        }
+        for (let i = BLOCK_SIZE - 8 + 32; i < total; i++) {
+            expect(after[i]).toBe(i & 0xff);
+        }
+    });
+
+    it('readPartial caps at EOF; writePartial extends past it', async () => {
+        const fs = await makeFs();
+        await fs.createDirectory('/data', true);
+
+        const file = await fs.createFile('/data/grow.bin');
+        await file.write(encoder.encode('hello'));
+
+        // Read past EOF — only the in-range bytes come back, nothing
+        // extends.
+        const tail = await file.readPartial(2, 100);
+        expect(decoder.decode(tail)).toBe('llo');
+
+        // Reading entirely past EOF: empty.
+        expect((await file.readPartial(50, 10)).length).toBe(0);
+
+        // Write past EOF — the file grows; bytes between the old EOF
+        // and the new write are zero-filled (the inode's resize() does
+        // that).
+        await file.writePartial(10, encoder.encode('XYZ'));
+        await file.setPos(0);
+        const all = await file.read();
+        expect(all.length).toBe(13);
+        expect(decoder.decode(all.subarray(0, 5))).toBe('hello');
+        for (let i = 5; i < 10; i++) expect(all[i]).toBe(0);
+        expect(decoder.decode(all.subarray(10))).toBe('XYZ');
+    });
 });

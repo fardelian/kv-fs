@@ -147,6 +147,66 @@ describe('KvBlockDevice (base)', () => {
             const results = await device.batch([]);
             expect(results).toEqual([]);
         });
+
+        it('dispatches alloc and surfaces the new blockId', async () => {
+            const device = new MockBlockDevice(4096);
+            device.allocateBlock.mockResolvedValueOnce(42);
+
+            const results = await device.batch([{ op: 'alloc' }]);
+
+            expect(results[0]).toEqual({ ok: true, blockId: 42 });
+            expect(device.allocateBlock).toHaveBeenCalledTimes(1);
+        });
+
+        it('dispatches partial-read via the default readBlockPartial (read+slice)', async () => {
+            const device = new MockBlockDevice(4096);
+            const block = new Uint8Array(4096);
+            for (let i = 0; i < block.length; i++) block[i] = i & 0xff;
+            device.readBlock.mockResolvedValueOnce(block);
+
+            const results = await device.batch([
+                { op: 'partial-read', blockId: 1, start: 10, end: 16 },
+            ]);
+
+            expect(results[0].ok).toBe(true);
+            const got = (results[0] as { ok: true; data: Uint8Array }).data;
+            expect(Array.from(got)).toEqual([10, 11, 12, 13, 14, 15]);
+        });
+
+        it('dispatches partial-write via the default writeBlockPartial (RMW)', async () => {
+            const device = new MockBlockDevice(4096);
+            const block = new Uint8Array(4096);
+            device.readBlock.mockResolvedValueOnce(block);
+            device.writeBlock.mockResolvedValueOnce(undefined);
+
+            const data = new Uint8Array([0xab, 0xcd]);
+            const results = await device.batch([
+                { op: 'partial-write', blockId: 2, offset: 100, data },
+            ]);
+
+            expect(results[0]).toEqual({ ok: true });
+            const [writtenId, writtenData] = device.writeBlock.mock.calls[0];
+            expect(writtenId).toBe(2);
+            expect(writtenData[100]).toBe(0xab);
+            expect(writtenData[101]).toBe(0xcd);
+        });
+    });
+
+    describe('default partial helpers', () => {
+        it('readBlockPartial returns an empty buffer when end <= start', async () => {
+            const device = new MockBlockDevice(4096);
+            const empty = await device.readBlockPartial(0, 10, 10);
+            expect(empty.length).toBe(0);
+            // Equal-bounds path short-circuits before any readBlock fetch.
+            expect(device.readBlock).not.toHaveBeenCalled();
+        });
+
+        it('writeBlockPartial is a no-op when data is empty', async () => {
+            const device = new MockBlockDevice(4096);
+            await device.writeBlockPartial(0, 0, new Uint8Array(0));
+            expect(device.readBlock).not.toHaveBeenCalled();
+            expect(device.writeBlock).not.toHaveBeenCalled();
+        });
     });
 
     describe('readBlocksWithDecoys', () => {

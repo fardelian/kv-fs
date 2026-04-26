@@ -219,6 +219,107 @@ export class KvINodeFile extends INode<Uint8Array> {
         await this.writeMetadata();
     }
 
+    /**
+     * Read up to `length` bytes starting at byte `start`, without
+     * touching the file's current position. Modeled on POSIX `pread`.
+     * Returns fewer bytes (or an empty buffer) at EOF; never extends.
+     *
+     * Each block in the requested range is fetched via the block
+     * device's `readBlockPartial` for the first/last (sub-block) ranges
+     * and `readBlock` for any fully-covered middle blocks. Backends that
+     * have native byte-addressable reads (memory slice, FS positioned
+     * read, SQLite `substr`) get to use them.
+     */
+    @Init
+    public async readPartial(start: number, length: number): Promise<Uint8Array> {
+        if (start < 0) throw new Error(`start must be non-negative; got ${start}.`);
+        if (length < 0) throw new Error(`length must be non-negative; got ${length}.`);
+        if (length === 0 || start >= this.size) return new Uint8Array(0);
+
+        const realLength = Math.min(length, this.size - start);
+        const blockSize = this.blockDevice.getBlockSize();
+        const endPos = start + realLength;
+        const data = new Uint8Array(realLength);
+
+        const firstBlock = Math.floor(start / blockSize);
+        const lastBlock = Math.floor((endPos - 1) / blockSize);
+
+        for (let b = firstBlock; b <= lastBlock; b++) {
+            const blockStart = b * blockSize;
+            const sliceStart = Math.max(start, blockStart);
+            const sliceEnd = Math.min(endPos, blockStart + blockSize);
+            const sliceLen = sliceEnd - sliceStart;
+            const blockOffset = sliceStart - blockStart;
+            const dataOffset = sliceStart - start;
+
+            if (sliceLen === blockSize) {
+                const block = await this.blockDevice.readBlock(this.dataBlockIds[b]);
+                data.set(block, dataOffset);
+            } else {
+                const partial = await this.blockDevice.readBlockPartial(
+                    this.dataBlockIds[b],
+                    blockOffset,
+                    blockOffset + sliceLen,
+                );
+                data.set(partial, dataOffset);
+            }
+        }
+
+        return data;
+    }
+
+    /**
+     * Write `data` at byte `offset`, without touching the file's
+     * current position. Modeled on POSIX `pwrite`. Extends the file if
+     * `offset + data.length > size`, matching the extension semantics
+     * of {@link write}; never shrinks.
+     *
+     * Sub-block writes go through the block device's
+     * `writeBlockPartial` so backends with native byte-addressable
+     * writes (memory splice, FS positioned write, SQLite `substr` || ||)
+     * skip the read-modify-write the abstract default would do.
+     */
+    @Init
+    public async writePartial(offset: number, data: Uint8Array): Promise<void> {
+        if (offset < 0) throw new Error(`offset must be non-negative; got ${offset}.`);
+        if (data.length === 0) return;
+
+        const blockSize = this.blockDevice.getBlockSize();
+        const endPos = offset + data.length;
+
+        if (endPos > this.size) {
+            await this.resize(endPos);
+        }
+
+        const firstBlock = Math.floor(offset / blockSize);
+        const lastBlock = Math.floor((endPos - 1) / blockSize);
+
+        for (let b = firstBlock; b <= lastBlock; b++) {
+            const blockStart = b * blockSize;
+            const writeStart = Math.max(offset, blockStart);
+            const writeEnd = Math.min(endPos, blockStart + blockSize);
+            const writeLen = writeEnd - writeStart;
+            const dataOffset = writeStart - offset;
+            const offsetInBlock = writeStart - blockStart;
+
+            if (offsetInBlock === 0 && writeLen === blockSize) {
+                await this.blockDevice.writeBlock(
+                    this.dataBlockIds[b],
+                    data.subarray(dataOffset, dataOffset + blockSize),
+                );
+            } else {
+                await this.blockDevice.writeBlockPartial(
+                    this.dataBlockIds[b],
+                    offsetInBlock,
+                    data.subarray(dataOffset, dataOffset + writeLen),
+                );
+            }
+        }
+
+        this.modificationTime = new Date();
+        await this.writeMetadata();
+    }
+
     @Init
     public async unlink(): Promise<void> {
         for (const blockId of this.dataBlockIds) {

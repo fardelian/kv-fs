@@ -140,4 +140,64 @@ describe('KvBlockDeviceMemory', () => {
             expect(await device.getHighestBlockId()).toBe(-1);
         });
     });
+
+    describe('readBlockPartial', () => {
+        it('returns a freshly-allocated slice over the requested range', async () => {
+            await device.writeBlock(0, new Uint8Array([1, 2, 3, 4, 5]));
+
+            const slice = await device.readBlockPartial(0, 1, 4);
+
+            expect(Array.from(slice)).toEqual([2, 3, 4]);
+            // Mutating the returned slice must not affect the stored block.
+            slice[0] = 0xff;
+            const fresh = await device.readBlock(0);
+            expect(fresh[1]).toBe(2);
+        });
+
+        it('returns an empty buffer when end <= start (no fetch)', async () => {
+            const slice = await device.readBlockPartial(0, 5, 5);
+            expect(slice.length).toBe(0);
+        });
+
+        it('throws KvError_BD_NotFound when the block does not exist', async () => {
+            await expect(device.readBlockPartial(7, 0, 4)).rejects.toBeInstanceOf(KvError_BD_NotFound);
+        });
+    });
+
+    describe('writeBlockPartial', () => {
+        it('splices into the existing block in place', async () => {
+            await device.writeBlock(3, new Uint8Array(BLOCK_SIZE));
+
+            await device.writeBlockPartial(3, 100, new Uint8Array([0xa, 0xb, 0xc]));
+
+            const block = await device.readBlock(3);
+            expect(block[99]).toBe(0);
+            expect(block[100]).toBe(0xa);
+            expect(block[101]).toBe(0xb);
+            expect(block[102]).toBe(0xc);
+            expect(block[103]).toBe(0);
+        });
+
+        it('throws KvError_BD_Overflow when offset + data exceeds blockSize', async () => {
+            await device.writeBlock(0, new Uint8Array(BLOCK_SIZE));
+
+            await expect(device.writeBlockPartial(0, BLOCK_SIZE - 2, new Uint8Array(4)))
+                .rejects.toBeInstanceOf(KvError_BD_Overflow);
+        });
+
+        it('throws KvError_BD_NotFound when the block does not exist', async () => {
+            await expect(device.writeBlockPartial(99, 0, new Uint8Array([1])))
+                .rejects.toBeInstanceOf(KvError_BD_NotFound);
+        });
+
+        it('is a no-op when data is empty', async () => {
+            await device.writeBlock(2, new Uint8Array([1, 2, 3]));
+
+            await device.writeBlockPartial(2, 0, new Uint8Array(0));
+
+            // Still readable; existing block unchanged at the head.
+            const block = await device.readBlock(2);
+            expect(block[0]).toBe(1);
+        });
+    });
 });

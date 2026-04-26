@@ -64,6 +64,26 @@ async function run() {
     const rootDir = await easyFileSystem.getDirectory('/');
     console.log('rootDir:', await rootDir.read());
 
+    // Demonstrate byte-addressable partial reads/writes (POSIX-style
+    // pread/pwrite). They don't move the file's read/write position
+    // and they go through the block device's native partial path —
+    // for the FS backend this is positioned `fd.read` / `fd.write`,
+    // so only the requested bytes touch disk.
+    const partialPath = '/home/florin/partial.bin';
+    const partialFile = await easyFileSystem.createFile(partialPath);
+    await partialFile.write(new TextEncoder().encode('Hello, partial world!'));
+
+    // Splice "PATCH" in at offset 7, replacing "partial" → "PATCHal " region.
+    await partialFile.writePartial(7, new TextEncoder().encode('PATCH'));
+
+    // Read just the patched window without moving the cursor.
+    const patched = await partialFile.readPartial(7, 5);
+    console.log('readPartial(7, 5):', decoder.decode(patched));
+
+    await partialFile.setPos(0);
+    const wholeAfter = await partialFile.read();
+    console.log('full file after writePartial:', decoder.decode(wholeAfter));
+
     console.log('time:', new Date().getTime() - t0);
 }
 

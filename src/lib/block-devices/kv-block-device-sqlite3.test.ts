@@ -1,6 +1,6 @@
 import { describe, it, expect, jest } from 'bun:test';
 import { KvBlockDeviceSqlite3 } from './kv-block-device-sqlite3';
-import { KvError_BD_NotFound } from '../utils';
+import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils';
 import type { AsyncDatabase } from 'promised-sqlite3';
 
 const BLOCK_SIZE = 4096;
@@ -102,7 +102,7 @@ describe('KvBlockDeviceSqlite3', () => {
     });
 
     describe('writeBlock', () => {
-        it('issues INSERT OR REPLACE with id and a Buffer view of the data', async () => {
+        it('issues INSERT OR REPLACE with id and a Buffer padded to blockSize', async () => {
             const { database, device } = makeDevice();
             database.run.mockResolvedValueOnce(undefined); // init
             database.run.mockResolvedValueOnce(undefined); // write
@@ -116,7 +116,13 @@ describe('KvBlockDeviceSqlite3', () => {
                 expect.any(Buffer),
             );
             const blob = database.run.mock.calls[1][2] as Buffer;
-            expect(Array.from(blob)).toEqual([1, 2, 3, 4, 5]);
+            // Short writes are zero-padded up to blockSize so reads always
+            // return exactly `blockSize` bytes (matches FS / memory backends).
+            expect(blob.length).toBe(BLOCK_SIZE);
+            expect(Array.from(blob.subarray(0, 5))).toEqual([1, 2, 3, 4, 5]);
+            for (let i = 5; i < BLOCK_SIZE; i++) {
+                expect(blob[i]).toBe(0);
+            }
         });
     });
 
@@ -232,6 +238,107 @@ describe('KvBlockDeviceSqlite3', () => {
             expect(calls[2]).toBe(
                 `CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (id INTEGER PRIMARY KEY, data BLOB)`,
             );
+        });
+    });
+
+    describe('writeBlock overflow', () => {
+        it('throws KvError_BD_Overflow when data exceeds blockSize', async () => {
+            const { database, device } = makeDevice();
+            database.run.mockResolvedValueOnce(undefined); // init
+
+            await expect(device.writeBlock(0, new Uint8Array(BLOCK_SIZE + 1)))
+                .rejects.toBeInstanceOf(KvError_BD_Overflow);
+        });
+    });
+
+    describe('readBlockPartial', () => {
+        it('issues SELECT substr(data, ?, ?) and returns the slice bytes', async () => {
+            const { database, device } = makeDevice();
+            database.run.mockResolvedValueOnce(undefined); // init
+            const slice = new Uint8Array([0xa, 0xb, 0xc, 0xd]);
+            database.get.mockResolvedValueOnce({ data: slice.buffer });
+
+            const out = await device.readBlockPartial(7, 100, 104);
+
+            expect(database.get).toHaveBeenLastCalledWith(
+                // SQLite substr is 1-indexed; start=100 → param=101.
+                `SELECT substr(data, ?, ?) AS data FROM ${TABLE_NAME} WHERE id = ?`,
+                101,
+                4,
+                7,
+            );
+            expect(Array.from(out)).toEqual([0xa, 0xb, 0xc, 0xd]);
+        });
+
+        it('returns an empty buffer without querying when end <= start', async () => {
+            const { database, device } = makeDevice();
+            database.run.mockResolvedValueOnce(undefined); // init
+
+            const out = await device.readBlockPartial(0, 5, 5);
+
+            expect(out.length).toBe(0);
+            // Only the init CREATE was issued; no SELECT.
+            expect(database.get).not.toHaveBeenCalled();
+        });
+
+        it('throws KvError_BD_NotFound when no row matches the id', async () => {
+            const { database, device } = makeDevice();
+            database.run.mockResolvedValueOnce(undefined);
+            database.get.mockResolvedValueOnce(undefined);
+
+            await expect(device.readBlockPartial(99, 0, 4))
+                .rejects.toBeInstanceOf(KvError_BD_NotFound);
+        });
+    });
+
+    describe('writeBlockPartial', () => {
+        it('splices the data into the existing BLOB via substr concatenation', async () => {
+            const { database, device } = makeDevice();
+            database.run.mockResolvedValueOnce(undefined); // init
+            database.get.mockResolvedValueOnce({ E: 1 }); // existsBlock
+            database.run.mockResolvedValueOnce(undefined); // UPDATE
+
+            const data = new Uint8Array([0xff, 0xee]);
+            await device.writeBlockPartial(3, 50, data);
+
+            const lastCall = database.run.mock.calls[database.run.mock.calls.length - 1];
+            expect(lastCall[0]).toBe(
+                `UPDATE ${TABLE_NAME} SET data = substr(data, 1, ?) || ? || substr(data, ?) WHERE id = ?`,
+            );
+            expect(lastCall[1]).toBe(50);
+            expect(lastCall[2]).toBeInstanceOf(Buffer);
+            expect(Array.from(lastCall[2] as Buffer)).toEqual([0xff, 0xee]);
+            // suffix-from index: 1-indexed, after offset+length → 50+2+1 = 53.
+            expect(lastCall[3]).toBe(53);
+            expect(lastCall[4]).toBe(3);
+        });
+
+        it('is a no-op when data is empty', async () => {
+            const { database, device } = makeDevice();
+            database.run.mockResolvedValueOnce(undefined); // init
+
+            await device.writeBlockPartial(0, 0, new Uint8Array(0));
+
+            // Only the init CREATE was issued.
+            expect(database.run).toHaveBeenCalledTimes(1);
+            expect(database.get).not.toHaveBeenCalled();
+        });
+
+        it('throws KvError_BD_Overflow when offset + data exceeds blockSize', async () => {
+            const { database, device } = makeDevice();
+            database.run.mockResolvedValueOnce(undefined); // init
+
+            await expect(device.writeBlockPartial(0, BLOCK_SIZE - 2, new Uint8Array(4)))
+                .rejects.toBeInstanceOf(KvError_BD_Overflow);
+        });
+
+        it('throws KvError_BD_NotFound when the target row does not exist', async () => {
+            const { database, device } = makeDevice();
+            database.run.mockResolvedValueOnce(undefined); // init
+            database.get.mockResolvedValueOnce({ E: 0 }); // existsBlock → false
+
+            await expect(device.writeBlockPartial(99, 0, new Uint8Array([1])))
+                .rejects.toBeInstanceOf(KvError_BD_NotFound);
         });
     });
 });

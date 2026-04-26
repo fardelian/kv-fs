@@ -1,30 +1,38 @@
 import { KvBatchOp, KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
 import { Router } from 'express';
 
+/**
+ * Loose runtime shape for one batch op. Stays as `string` for `op` and
+ * leaves all other fields optional so we can validate them ourselves at
+ * the JSON boundary — narrowing the type up front would let malformed
+ * payloads pass straight through.
+ */
 interface WireBatchOp {
-    /**
-     * Stays as `string` rather than the narrower `'read' | 'write' | 'free'`
-     * so runtime payload validation actually has something to check —
-     * trusting the type at the JSON boundary leaves us with no way to
-     * reject a malformed `op` field.
-     */
     op: string;
-    blockId: number;
-    /** Hex-encoded data, only present for write ops. */
+    blockId?: number;
     data?: string;
+    start?: number;
+    end?: number;
+    offset?: number;
 }
 
+/**
+ * On-the-wire shape of one batch result. `data` is hex-encoded read
+ * bytes; `blockId` is the freshly-allocated ID from an `alloc`.
+ */
 interface WireBatchResult {
     ok: boolean;
-    /** Hex-encoded read result, only on successful read. */
     data?: string;
+    blockId?: number;
     error?: string;
 }
 
-// Parse `:blockId` and validate it falls inside the device's
-// current capacity. Returns -1 to signal "invalid" (per the
-// codebase convention of using -1 instead of null/undefined for
-// block-device-shaped values). Callers then 400 the request.
+/**
+ * Parse `:blockId` and validate it falls inside the device's
+ * current capacity. Returns -1 to signal "invalid" (per the
+ * codebase convention of using -1 instead of null/undefined for
+ * block-device-shaped values). Callers then 400 the request.
+ */
 const parseBlockId = (blockDevice: KvBlockDevice, id: unknown): number => {
     const blockId = Number(id);
     if (!Number.isInteger(blockId) || blockId < 0 || blockId >= blockDevice.getCapacityBlocks()) {
@@ -88,32 +96,70 @@ export class KvBlockDeviceHttpRouter {
                 }
 
                 const ops: KvBatchOp[] = [];
-                for (const wireOp of body.ops) {
-                    if (typeof wireOp.blockId !== 'number') {
+                const requireBlockId = (op: WireBatchOp): boolean => {
+                    if (typeof op.blockId !== 'number') {
                         res.status(400).json({ error: 'Each op needs a numeric blockId.' });
-                        return;
+                        return false;
                     }
+                    return true;
+                };
+
+                let aborted = false;
+                for (const wireOp of body.ops) {
+                    if (wireOp.op === 'alloc') {
+                        ops.push({ op: 'alloc' });
+                        continue;
+                    }
+                    if (!requireBlockId(wireOp)) {
+                        aborted = true;
+                        break;
+                    }
+                    const blockId = wireOp.blockId!;
                     if (wireOp.op === 'read') {
-                        ops.push({ op: 'read', blockId: wireOp.blockId });
+                        ops.push({ op: 'read', blockId });
                     } else if (wireOp.op === 'write') {
                         if (typeof wireOp.data !== 'string') {
                             res.status(400).json({ error: 'Write op requires hex `data`.' });
-                            return;
+                            aborted = true;
+                            break;
                         }
-                        ops.push({ op: 'write', blockId: wireOp.blockId, data: hexDecode(wireOp.data) });
+                        ops.push({ op: 'write', blockId, data: hexDecode(wireOp.data) });
                     } else if (wireOp.op === 'free') {
-                        ops.push({ op: 'free', blockId: wireOp.blockId });
+                        ops.push({ op: 'free', blockId });
+                    } else if (wireOp.op === 'partial-read') {
+                        if (typeof wireOp.start !== 'number' || typeof wireOp.end !== 'number') {
+                            res.status(400).json({ error: 'partial-read op requires numeric `start` and `end`.' });
+                            aborted = true;
+                            break;
+                        }
+                        ops.push({ op: 'partial-read', blockId, start: wireOp.start, end: wireOp.end });
+                    } else if (wireOp.op === 'partial-write') {
+                        if (typeof wireOp.offset !== 'number') {
+                            res.status(400).json({ error: 'partial-write op requires numeric `offset`.' });
+                            aborted = true;
+                            break;
+                        }
+                        if (typeof wireOp.data !== 'string') {
+                            res.status(400).json({ error: 'partial-write op requires hex `data`.' });
+                            aborted = true;
+                            break;
+                        }
+                        ops.push({ op: 'partial-write', blockId, offset: wireOp.offset, data: hexDecode(wireOp.data) });
                     } else {
                         res.status(400).json({ error: `Unknown op: ${wireOp.op}` });
-                        return;
+                        aborted = true;
+                        break;
                     }
                 }
+                if (aborted) return;
 
                 const results = await this.blockDevice.batch(ops);
                 const wireResults: WireBatchResult[] = results.map((r) => {
                     if (!r.ok) return { ok: false, error: r.error };
-                    if (r.data) return { ok: true, data: hexEncode(r.data) };
-                    return { ok: true };
+                    const wire: WireBatchResult = { ok: true };
+                    if (r.data) wire.data = hexEncode(r.data);
+                    if (r.blockId !== undefined) wire.blockId = r.blockId;
+                    return wire;
                 });
                 res.json({ results: wireResults });
             })
@@ -162,18 +208,33 @@ export class KvBlockDeviceHttpRouter {
 
             // GET /blocks/:blockId — fetch one block's bytes. Returned
             // raw with `Content-Type: application/octet-stream`.
+            //
+            // With `?start=X&end=Y` returns only bytes `[start, end)`,
+            // delegating to `readBlockPartial`. Both must be present
+            // and parseable; missing/invalid → 400.
             .get('/blocks/:blockId', async (req, res) => {
                 const blockId = parseBlockId(this.blockDevice, req.params.blockId);
                 if (blockId === -1) {
                     res.status(400).json({ error: `Invalid block ID: ${req.params.blockId}` });
                     return;
                 }
-                const block = await this.blockDevice.readBlock(blockId);
+                const partial = parsePartialRange(req.query);
+                if (partial === 'invalid') {
+                    res.status(400).json({ error: 'Invalid `start` / `end` query parameters.' });
+                    return;
+                }
+                const block = partial
+                    ? await this.blockDevice.readBlockPartial(blockId, partial.start, partial.end)
+                    : await this.blockDevice.readBlock(blockId);
                 res.type('application/octet-stream').send(Buffer.from(block));
             })
 
             // PUT /blocks/:blockId — write one block's bytes. Body is
             // the raw bytes (no envelope).
+            //
+            // With `?offset=X` splices the body into the existing block
+            // starting at `offset`, leaving the surrounding bytes
+            // untouched (`writeBlockPartial`).
             .put('/blocks/:blockId', async (req, res) => {
                 const blockId = parseBlockId(this.blockDevice, req.params.blockId);
                 if (blockId === -1) {
@@ -185,7 +246,16 @@ export class KvBlockDeviceHttpRouter {
                     res.status(400).json({ error: 'Expected application/octet-stream body.' });
                     return;
                 }
-                await this.blockDevice.writeBlock(blockId, data);
+                const offset = parsePartialOffset(req.query);
+                if (offset === 'invalid') {
+                    res.status(400).json({ error: 'Invalid `offset` query parameter.' });
+                    return;
+                }
+                if (offset === null) {
+                    await this.blockDevice.writeBlock(blockId, data);
+                } else {
+                    await this.blockDevice.writeBlockPartial(blockId, offset, data);
+                }
                 res.status(204).end();
             })
 
@@ -224,4 +294,35 @@ function hexEncode(bytes: Uint8Array): string {
 
 function hexDecode(hex: string): Uint8Array {
     return new Uint8Array(Buffer.from(hex, 'hex'));
+}
+
+/**
+ * Parse `?start=X&end=Y` from a query string. Returns `null` when
+ * neither is present (caller should do a full-block read), an object
+ * when both parse cleanly, or `'invalid'` when one is present but
+ * malformed (caller should 400). Mixed presence (only one of the two)
+ * counts as invalid.
+ */
+function parsePartialRange(query: unknown): { start: number; end: number } | null | 'invalid' {
+    const q = query as { start?: unknown; end?: unknown };
+    if (q.start === undefined && q.end === undefined) return null;
+    const start = Number(q.start);
+    const end = Number(q.end);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
+        return 'invalid';
+    }
+    return { start, end };
+}
+
+/**
+ * Parse `?offset=X` from a query string. Returns `null` when absent
+ * (full-block write), the parsed offset when valid, `'invalid'`
+ * otherwise.
+ */
+function parsePartialOffset(query: unknown): number | null | 'invalid' {
+    const q = query as { offset?: unknown };
+    if (q.offset === undefined) return null;
+    const offset = Number(q.offset);
+    if (!Number.isInteger(offset) || offset < 0) return 'invalid';
+    return offset;
 }

@@ -10,12 +10,20 @@ const mockUnlink = jest.fn<(p: string) => Promise<void>>();
 const mockAccess = jest.fn<(p: string) => Promise<void>>();
 const mockReaddir = jest.fn<(p: string) => Promise<string[]>>();
 
+interface FakeFd {
+    read: jest.Mock<(buffer: Uint8Array, off: number, len: number, pos: number) => Promise<{ bytesRead: number; buffer: Uint8Array }>>;
+    write: jest.Mock<(buffer: Uint8Array, off: number, len: number, pos: number) => Promise<{ bytesWritten: number; buffer: Uint8Array }>>;
+    close: jest.Mock<() => Promise<void>>;
+}
+const mockOpen = jest.fn<(p: string, flags: string) => Promise<FakeFd>>();
+
 mock.module('fs/promises', () => ({
     readFile: mockReadFile,
     writeFile: mockWriteFile,
     unlink: mockUnlink,
     access: mockAccess,
     readdir: mockReaddir,
+    open: mockOpen,
 }));
 
 // `await import` deferred to beforeAll because the project's main tsconfig
@@ -51,6 +59,7 @@ describe('KvBlockDeviceFs', () => {
         mockUnlink.mockReset();
         mockAccess.mockReset();
         mockReaddir.mockReset();
+        mockOpen.mockReset();
         device = new KvBlockDeviceFs(BLOCK_SIZE, CAPACITY_BYTES, BASE_PATH);
     });
 
@@ -295,6 +304,93 @@ describe('KvBlockDeviceFs', () => {
             for (const resolve of pending) resolve();
 
             await formatPromise;
+        });
+    });
+
+    describe('readBlockPartial', () => {
+        function makeFakeFd(): FakeFd {
+            return {
+                read: jest.fn<FakeFd['read']>(),
+                write: jest.fn<FakeFd['write']>(),
+                close: jest.fn<FakeFd['close']>().mockResolvedValue(undefined),
+            };
+        }
+
+        it('opens for read at <basePath>/<blockId>.txt and reads only the requested range', async () => {
+            const fd = makeFakeFd();
+            mockOpen.mockResolvedValueOnce(fd);
+            fd.read.mockImplementationOnce(async (buf) => {
+                buf.set([0x10, 0x11, 0x12, 0x13]);
+                return await Promise.resolve({ bytesRead: 4, buffer: buf });
+            });
+
+            const out = await device.readBlockPartial(2, 100, 104);
+
+            expect(mockOpen).toHaveBeenCalledWith(blockPath(2), 'r');
+            expect(fd.read).toHaveBeenCalledWith(expect.any(Uint8Array), 0, 4, 100);
+            expect(Array.from(out)).toEqual([0x10, 0x11, 0x12, 0x13]);
+            expect(fd.close).toHaveBeenCalledTimes(1);
+        });
+
+        it('returns an empty buffer when end <= start (no fd.open)', async () => {
+            const out = await device.readBlockPartial(0, 5, 5);
+            expect(out.length).toBe(0);
+            expect(mockOpen).not.toHaveBeenCalled();
+        });
+
+        it('still closes the fd if read throws', async () => {
+            const fd = makeFakeFd();
+            mockOpen.mockResolvedValueOnce(fd);
+            fd.read.mockRejectedValueOnce(new Error('disk gone'));
+
+            await expect(device.readBlockPartial(0, 0, 4)).rejects.toThrow('disk gone');
+            expect(fd.close).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('writeBlockPartial', () => {
+        function makeFakeFd(): FakeFd {
+            return {
+                read: jest.fn<FakeFd['read']>(),
+                write: jest.fn<FakeFd['write']>(),
+                close: jest.fn<FakeFd['close']>().mockResolvedValue(undefined),
+            };
+        }
+
+        it('opens for r+ and writes the data at the requested offset', async () => {
+            const fd = makeFakeFd();
+            mockOpen.mockResolvedValueOnce(fd);
+            fd.write.mockResolvedValueOnce({ bytesWritten: 3, buffer: new Uint8Array() });
+
+            const data = new Uint8Array([0xa, 0xb, 0xc]);
+            await device.writeBlockPartial(5, 200, data);
+
+            expect(mockOpen).toHaveBeenCalledWith(blockPath(5), 'r+');
+            expect(fd.write).toHaveBeenCalledWith(data, 0, 3, 200);
+            expect(fd.close).toHaveBeenCalledTimes(1);
+        });
+
+        it('throws KvError_BD_Overflow when offset + data exceeds blockSize', async () => {
+            const data = new Uint8Array(16);
+
+            await expect(device.writeBlockPartial(0, BLOCK_SIZE - 8, data))
+                .rejects.toBeInstanceOf(KvError_BD_Overflow);
+            expect(mockOpen).not.toHaveBeenCalled();
+        });
+
+        it('is a no-op when data is empty (no fd.open)', async () => {
+            await device.writeBlockPartial(0, 0, new Uint8Array(0));
+            expect(mockOpen).not.toHaveBeenCalled();
+        });
+
+        it('still closes the fd if write throws', async () => {
+            const fd = makeFakeFd();
+            mockOpen.mockResolvedValueOnce(fd);
+            fd.write.mockRejectedValueOnce(new Error('EIO'));
+
+            await expect(device.writeBlockPartial(0, 0, new Uint8Array([1])))
+                .rejects.toThrow('EIO');
+            expect(fd.close).toHaveBeenCalledTimes(1);
         });
     });
 });

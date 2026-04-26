@@ -142,9 +142,19 @@ All examples output the same thing.
 The simplest example is in `src/examples/example-memory.ts`. Start from there, read it and play around with it.
 
 For a more complex example, run `start-http-server` in a terminal and then `start-http-client` in another one.
-The HTTP server uses the express router in `src/lib/block-devices/kv-block-device-http-router.ts`
-to map Block Device methods to HTTP endpoints. Note that both the client and the server implement encryption.
-This is redundant as it should only be in the client, but it's still good practice to encrypt data stored on servers.
+The server uses the express router in [`kv-block-device-http-router.ts`](src/lib/block-devices/kv-block-device-http-router.ts)
+to map block-device methods to HTTP endpoints, with SQLite as the backing store. Both sides
+wrap their own block device with `KvEncryptedBlockDevice`, but for different reasons:
+
+- The **client** wraps the HTTP transport with `KvEncryptionPassword` (PBKDF2 → AES-256-CBC).
+  Plaintext never leaves the client — the server only ever sees AES ciphertext on the wire and
+  at rest. That is the zero-knowledge property: the server can't read your files even if it
+  wants to.
+- The **server** wraps SQLite with `KvEncryptionRot13`, purely to demonstrate that encryption
+  is itself a block device and stacks like any other layer. ROT13 is a toy; in a real
+  deployment you would swap it for a real at-rest cipher (or skip server-side encryption
+  entirely if the disk is already trusted). What gives you confidentiality against the server
+  is the *client-side* layer.
 
 ## Tests
 

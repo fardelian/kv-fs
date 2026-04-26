@@ -45,6 +45,9 @@ const TOTAL_BLOCKS = 1000;
 const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
+/** Total number of `[N/STEP_COUNT]` log lines this script emits. Bump when adding a step. */
+const STEP_COUNT = 6;
+
 const TABLE_NAME = 'blocks_fuse_manual';
 // Resolve `data/` relative to this source file via import.meta.url —
 // `__dirname` doesn't exist under Node ESM (this example runs via tsx).
@@ -92,7 +95,7 @@ function adaptAsync<R>(
 }
 
 async function run(): Promise<void> {
-    console.log('[1/6] loading @cocalc/fuse-native...');
+    console.log(`[1/${STEP_COUNT}] loading @cocalc/fuse-native...`);
     let Fuse: typeof import('@cocalc/fuse-native').default;
     try {
         const mod = await import('@cocalc/fuse-native');
@@ -111,7 +114,7 @@ async function run(): Promise<void> {
     }
 
     // ---- 1. SQLite-backed kv-fs on a fresh table ----
-    console.log('[2/6] opening SQLite database...');
+    console.log(`[2/${STEP_COUNT}] opening SQLite database...`);
     const database = await AsyncDatabase.open(DB_PATH);
     const blockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
@@ -124,10 +127,10 @@ async function run(): Promise<void> {
     const highest = await blockDevice.getHighestBlockId();
     const wasFormatted = highest === -1;
     if (wasFormatted) {
-        console.log(`[3/6] table "${TABLE_NAME}" is empty — formatting a fresh kv-fs volume.`);
+        console.log(`[3/${STEP_COUNT}] table "${TABLE_NAME}" is empty — formatting a fresh kv-fs volume.`);
         await KvFilesystem.format(blockDevice, TOTAL_INODES);
     } else {
-        console.log(`[3/6] table "${TABLE_NAME}" already populated (highest block id = ${highest}); reusing the existing volume.`);
+        console.log(`[3/${STEP_COUNT}] table "${TABLE_NAME}" already populated (highest block id = ${highest}); reusing the existing volume.`);
     }
 
     const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
@@ -265,16 +268,16 @@ async function run(): Promise<void> {
     };
 
     // ---- 3. Mount ----
-    console.log(`[4/6] constructing Fuse(${MOUNT_POINT}, ...)...`);
+    console.log(`[4/${STEP_COUNT}] constructing Fuse(${MOUNT_POINT}, ...)...`);
     const fuse = new Fuse(MOUNT_POINT, ops, { force: true, mkdir: true });
-    console.log('[5/6] calling fuse.mount() — this is where macFUSE / FUSE-T gets engaged...');
+    console.log(`[5/${STEP_COUNT}] calling fuse.mount() — this is where macFUSE / FUSE-T gets engaged...`);
     await new Promise<void>((resolve, reject) => {
         fuse.mount((err: Error | null) => {
             if (err) reject(err);
             else resolve();
         });
     });
-    console.log(`[6/6] mounted at ${MOUNT_POINT}.`);
+    console.log(`[6/${STEP_COUNT}] mounted at ${MOUNT_POINT}.`);
     console.log('Spawning bash with cwd=$KVFS_MOUNT. Try:');
     console.log('  ls -al');
     console.log('  cat README.txt');

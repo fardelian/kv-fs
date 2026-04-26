@@ -26,8 +26,10 @@ describe('KvFuseHandlers', () => {
         it('reports a directory mode for the root', async () => {
             const { handlers } = await makeHandlers();
             const stat = await handlers.getattr('/');
-            // 0o040755 = directory rwxr-xr-x
-            expect(stat.mode).toBe(0o040755);
+            // 0o040777 = directory rwxrwxrwx — the kv-fs inode doesn't
+            // store mode bits yet, so we report wide-open access until
+            // chmod / access semantics land.
+            expect(stat.mode).toBe(0o040777);
         });
 
         it('reports a regular-file mode and the actual size for a file', async () => {
@@ -37,7 +39,8 @@ describe('KvFuseHandlers', () => {
 
             const stat = await handlers.getattr('/note.txt');
 
-            expect(stat.mode).toBe(0o100644);
+            // 0o100777 = regular file rwxrwxrwx (see above).
+            expect(stat.mode).toBe(0o100777);
             expect(stat.size).toBe(5);
         });
 
@@ -239,6 +242,148 @@ describe('KvFuseHandlers', () => {
             expect(err.code).toBe('ENOENT');
             expect(err.message).toBe('gone');
             expect(err.name).toBe('KvFuseError');
+        });
+    });
+
+    describe('access / utimens / chmod / chown', () => {
+        it('access succeeds on a path that exists (file)', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+
+            await expect(handlers.access('/a.txt')).resolves.toBeUndefined();
+        });
+
+        it('access succeeds on the root directory', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.access('/')).resolves.toBeUndefined();
+        });
+
+        it('access throws ENOENT for a missing path', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.access('/missing.txt'))
+                .rejects.toMatchObject({ code: 'ENOENT' });
+        });
+
+        it('utimens persists mtime on a file (atime is silently ignored)', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+            const target = new Date('2022-03-04T05:06:07Z');
+
+            await handlers.utimens('/a.txt', new Date(0), target);
+
+            const stat = await handlers.getattr('/a.txt');
+            expect(stat.mtime.getTime()).toBe(target.getTime());
+        });
+
+        it('utimens persists mtime on a directory', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createDirectory('/sub', true);
+            const target = new Date('2024-01-01T00:00:00Z');
+
+            await handlers.utimens('/sub', new Date(0), target);
+
+            const stat = await handlers.getattr('/sub');
+            expect(stat.mtime.getTime()).toBe(target.getTime());
+        });
+
+        it('utimens persists mtime on the root directory (no-leaf branch)', async () => {
+            const { handlers } = await makeHandlers();
+            const target = new Date('2025-07-08T09:10:11Z');
+
+            await handlers.utimens('/', new Date(0), target);
+
+            const stat = await handlers.getattr('/');
+            expect(stat.mtime.getTime()).toBe(target.getTime());
+        });
+
+        it('utimens throws ENOENT for a missing path', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.utimens('/missing.txt', new Date(0), new Date()))
+                .rejects.toMatchObject({ code: 'ENOENT' });
+        });
+
+        it('chmod silently accepts on an existing path', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+
+            await expect(handlers.chmod('/a.txt', 0o600)).resolves.toBeUndefined();
+        });
+
+        it('chmod returns ENOENT for a missing path', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.chmod('/missing.txt', 0o600))
+                .rejects.toMatchObject({ code: 'ENOENT' });
+        });
+
+        it('chown silently accepts on an existing path', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+
+            await expect(handlers.chown('/a.txt', 1000, 1000)).resolves.toBeUndefined();
+        });
+
+        it('chown returns ENOENT for a missing path', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.chown('/missing.txt', 1000, 1000))
+                .rejects.toMatchObject({ code: 'ENOENT' });
+        });
+    });
+
+    describe('flush / fsync / statfs', () => {
+        it('flush is a no-op on an open file handle', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+            const fh = await handlers.open('/a.txt');
+
+            await expect(handlers.flush(fh)).resolves.toBeUndefined();
+        });
+
+        it('flush throws EBADF on an unknown handle', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.flush(99)).rejects.toMatchObject({ code: 'EBADF' });
+        });
+
+        it('fsync is a no-op on an open file handle', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+            const fh = await handlers.open('/a.txt');
+
+            await expect(handlers.fsync(fh)).resolves.toBeUndefined();
+            await expect(handlers.fsync(fh, true)).resolves.toBeUndefined();
+        });
+
+        it('fsync throws EBADF on an unknown handle', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.fsync(99)).rejects.toMatchObject({ code: 'EBADF' });
+        });
+
+        it('statfs reports volume capacity', async () => {
+            const { handlers } = await makeHandlers();
+            const stat = await handlers.statfs();
+
+            expect(stat.blockSize).toBeGreaterThan(0);
+            expect(stat.totalBlocks).toBeGreaterThan(0);
+            expect(stat.usedBlocks + stat.freeBlocks).toBe(stat.totalBlocks);
+        });
+
+        it('statfs accepts the optional path argument', async () => {
+            const { handlers } = await makeHandlers();
+            const stat = await handlers.statfs('/anything');
+            expect(stat.totalBlocks).toBeGreaterThan(0);
+        });
+    });
+
+    describe('mode argument on create / mkdir', () => {
+        it('create accepts an explicit mode argument and returns a usable handle', async () => {
+            const { handlers } = await makeHandlers();
+            const fh = await handlers.create('/note.txt', 0o600);
+            expect(fh).toBeGreaterThan(0);
+        });
+
+        it('mkdir accepts an explicit mode argument', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await handlers.mkdir('/sub', 0o700);
+            expect(await fs.readDirectory('/')).toContain('sub');
         });
     });
 });

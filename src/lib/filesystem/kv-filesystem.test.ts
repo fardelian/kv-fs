@@ -191,3 +191,80 @@ describe('KvFilesystem.rename', () => {
         expect(await renamed.hasEntry('inside.txt')).toBe(true);
     });
 });
+
+describe('KvFilesystem.flush / fsync', () => {
+    it('flush is a no-op (writes are write-through)', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+
+        await expect(fs.flush(file)).resolves.toBeUndefined();
+    });
+
+    it('fsync is a no-op', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+
+        await expect(fs.fsync(file)).resolves.toBeUndefined();
+    });
+});
+
+describe('KvFilesystem.statfs', () => {
+    it('reports blockSize / totalBlocks / usedBlocks / freeBlocks live from the device', async () => {
+        const fs = await makeFs();
+        const stat = await fs.statfs();
+
+        expect(stat.blockSize).toBe(BLOCK_SIZE);
+        expect(stat.totalBlocks).toBe(CAPACITY_BLOCKS);
+        // Format consumes at least the superblock + the root directory.
+        expect(stat.usedBlocks).toBeGreaterThanOrEqual(1);
+        expect(stat.usedBlocks + stat.freeBlocks).toBe(stat.totalBlocks);
+    });
+
+    it('reflects new allocations as more blocks are written', async () => {
+        const fs = await makeFs();
+        const before = await fs.statfs();
+
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.bin', root);
+        await fs.write(file, new Uint8Array(BLOCK_SIZE * 2));
+
+        const after = await fs.statfs();
+        expect(after.usedBlocks).toBeGreaterThan(before.usedBlocks);
+        expect(after.freeBlocks).toBeLessThan(before.freeBlocks);
+    });
+});
+
+describe('KvFilesystem.touch', () => {
+    it('updates a file inode\'s modificationTime and persists it', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+        const target = new Date('2020-01-01T00:00:00Z');
+
+        await fs.touch(file, target);
+        expect(file.modificationTime.getTime()).toBe(target.getTime());
+
+        // Re-open the inode through a fresh KvINodeFile so we know the
+        // change went to disk, not just the in-memory field.
+        const reopened = await fs.getKvFile('a.txt', root);
+        // Force @Init via a 0-byte read.
+        await reopened.read(0);
+        expect(reopened.modificationTime.getTime()).toBe(target.getTime());
+    });
+
+    it('updates a directory inode\'s modificationTime and persists it', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const child = await fs.createDirectory('child', root);
+        const target = new Date('2021-06-15T12:00:00Z');
+
+        await fs.touch(child, target);
+        expect(child.modificationTime.getTime()).toBe(target.getTime());
+
+        const reopened = await fs.getDirectory('child', root);
+        await reopened.read();
+        expect(reopened.modificationTime.getTime()).toBe(target.getTime());
+    });
+});

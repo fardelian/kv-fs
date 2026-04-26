@@ -320,6 +320,18 @@ export class KvINodeFile extends INode<Uint8Array> {
         await this.writeMetadata();
     }
 
+    /**
+     * Update the file's modification time and persist it to the inode
+     * block. Models POSIX `utimens` (mtime half) — atime isn't stored
+     * in the on-disk header, so callers ignore it. The data blocks are
+     * untouched; only the inode metadata is rewritten.
+     */
+    @Init
+    public async touch(modificationTime: Date): Promise<void> {
+        this.modificationTime = modificationTime;
+        await this.writeMetadata();
+    }
+
     @Init
     public async unlink(): Promise<void> {
         for (const blockId of this.dataBlockIds) {

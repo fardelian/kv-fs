@@ -34,6 +34,17 @@ describe('KvFilesystemSimple', () => {
         });
     });
 
+    describe('getFilesystem', () => {
+        it('returns the underlying KvFilesystem the wrapper was constructed with', async () => {
+            const fs = await makeFs();
+            const lower = fs.getFilesystem();
+            expect(lower).toBeInstanceOf(KvFilesystem);
+            // The lower-level handle reaches the same root directory.
+            const root = await lower.getRootDirectory();
+            expect((await root.read()).size).toBe(0);
+        });
+    });
+
     describe('createFile', () => {
         it('creates a file at the given absolute path', async () => {
             const fs = await makeFs();

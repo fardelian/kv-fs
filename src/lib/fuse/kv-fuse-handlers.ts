@@ -1,5 +1,5 @@
-import { KvFilesystemSimple } from '../filesystem';
-import { KvINodeFile } from '../inode';
+import { KvFilesystemStat, KvFilesystemSimple } from '../filesystem';
+import { KvINodeDirectory, KvINodeFile } from '../inode';
 import { KvError_FS_Exists, KvError_FS_NotEmpty, KvError_FS_NotFound, KvError_INode_KindMismatch } from '../utils';
 
 /**
@@ -101,7 +101,11 @@ export class KvFuseHandlers {
                 // Force init() so the kind byte is checked.
                 await file.read(0);
                 return {
-                    mode: 0o100644,
+                    // 0o100777: regular file, full rwx for everyone. The
+                    // kv-fs inode doesn't store mode bits (we'll add them
+                    // later); until then we return wide-open so chmod /
+                    // access don't fight whatever the OS expects.
+                    mode: 0o100777,
                     size: file.size,
                     mtime: file.modificationTime,
                     ctime: file.creationTime,
@@ -127,7 +131,8 @@ export class KvFuseHandlers {
             // Force init() so the kind byte is checked and timestamps are populated.
             await dir.read();
             return {
-                mode: 0o040755,
+                // 0o040777: directory, full rwx for everyone (see above).
+                mode: 0o040777,
                 size: this.blockSize,
                 mtime: dir.modificationTime,
                 ctime: dir.creationTime,
@@ -173,10 +178,13 @@ export class KvFuseHandlers {
     }
 
     /**
-     * `create(path)` — atomically create a new file and return an open
-     * handle. `EEXIST` on conflict.
+     * `create(path, mode)` — atomically create a new file and return
+     * an open handle. `EEXIST` on conflict. The kernel passes the
+     * requested permission bits in `mode`; we accept the parameter so
+     * the FUSE binding's signature lines up but ignore the value
+     * because the kv-fs inode doesn't carry mode bits yet.
      */
-    public async create(path: string): Promise<number> {
+    public async create(path: string, _mode = 0o666): Promise<number> {
         try {
             await this.fs.createFile(path);
         } catch (err) {
@@ -222,8 +230,13 @@ export class KvFuseHandlers {
         }
     }
 
-    /** Create a directory. */
-    public async mkdir(path: string): Promise<void> {
+    /**
+     * `mkdir(path, mode)` — create a directory. The kernel passes the
+     * requested permission bits in `mode`; we accept the parameter to
+     * line up with the FUSE binding signature but ignore the value
+     * because the kv-fs inode doesn't carry mode bits yet.
+     */
+    public async mkdir(path: string, _mode = 0o777): Promise<void> {
         try {
             await this.fs.createDirectory(path);
         } catch (err) {
@@ -283,6 +296,112 @@ export class KvFuseHandlers {
             }
             throw new KvFuseError('EIO', err instanceof Error ? err.message : String(err));
         }
+    }
+
+    /**
+     * `access(path, mode)` — POSIX `access(2)`. We don't track per-file
+     * permissions, so the only thing this can meaningfully do is
+     * confirm the path resolves; getattr does that already (and
+     * throws ENOENT if not), so we just delegate. `mode` is ignored.
+     */
+    public async access(path: string, _mode = 0): Promise<void> {
+        await this.getattr(path);
+    }
+
+    /**
+     * `utimens(path, atime, mtime)` — POSIX `utimensat(2)` shape. The
+     * kv-fs inode header only carries `creationTime` + `modificationTime`,
+     * so `atime` is accepted but silently dropped; `mtime` is persisted.
+     * Works for both files and directories; the dispatch matches the
+     * one in {@link getattr}.
+     */
+    public async utimens(path: string, _atime: Date, mtime: Date): Promise<void> {
+        const lower = this.fs.getFilesystem();
+        const isRoot = path === '/' || path === '';
+        if (!isRoot) {
+            try {
+                const file = await this.fs.getKvFile(path);
+                await file.read(0); // force @Init so mtime read on next getattr is fresh
+                await lower.touch(file, mtime);
+                return;
+            } catch (err) {
+                if (err instanceof KvError_INode_KindMismatch) {
+                    // Fall through to the directory branch.
+                } else if (err instanceof KvError_FS_NotFound) {
+                    throw new KvFuseError('ENOENT', `Path "${path}" not found.`);
+                } else {
+                    throw new KvFuseError('EIO', err instanceof Error ? err.message : String(err));
+                }
+            }
+        }
+        try {
+            const dir: KvINodeDirectory = await this.fs.getDirectory(path);
+            await dir.read();
+            await lower.touch(dir, mtime);
+        } catch (err) {
+            if (err instanceof KvError_FS_NotFound) {
+                throw new KvFuseError('ENOENT', `Path "${path}" not found.`);
+            }
+            throw new KvFuseError('EIO', err instanceof Error ? err.message : String(err));
+        }
+    }
+
+    /**
+     * `chmod(path, mode)` — accepted and silently ignored. The kv-fs
+     * inode doesn't carry mode bits yet (full-access is reported by
+     * {@link getattr}); returning success keeps `chmod` calls from
+     * surfacing spurious errors. Will gain real semantics when the
+     * inode header is widened.
+     */
+    public async chmod(path: string, _mode: number): Promise<void> {
+        // Resolve so a chmod against a missing path still returns ENOENT
+        // — that's what users expect even when the mode bits are
+        // ignored.
+        await this.access(path);
+    }
+
+    /**
+     * `chown(path, uid, gid)` — accepted and silently ignored. Same
+     * reasoning as {@link chmod}: the kv-fs inode doesn't carry uid /
+     * gid yet. Returns ENOENT on a missing path so the failure mode
+     * is at least correct.
+     */
+    public async chown(path: string, _uid: number, _gid: number): Promise<void> {
+        await this.access(path);
+    }
+
+    /**
+     * `flush(fh)` — POSIX `close(2)` calls this just before
+     * `release(fh)`. No-op for now: every `write` on a kv-fs file
+     * commits straight through to the block device, so there are no
+     * buffered bytes to flush. Implemented at the `KvFilesystem` layer
+     * so a future buffered-write optimization has a single hook to
+     * fill in.
+     */
+    public async flush(fh: number): Promise<void> {
+        const handle = this.requireFh(fh);
+        await this.fs.getFilesystem().flush(handle.file);
+    }
+
+    /**
+     * `fsync(fh, datasync)` — POSIX `fsync(2)` / `fdatasync(2)`. No-op
+     * for the same reason as {@link flush}: writes are already
+     * write-through. The `datasync` flag is accepted (some bindings
+     * supply it) but ignored — there's no metadata-vs-data split at
+     * this layer to act on.
+     */
+    public async fsync(fh: number, _datasync = false): Promise<void> {
+        const handle = this.requireFh(fh);
+        await this.fs.getFilesystem().fsync(handle.file);
+    }
+
+    /**
+     * `statfs(path)` — POSIX `statfs(2)`. Returns volume-level capacity
+     * info for `df` and friends. The `path` argument is part of the
+     * FUSE shape but unused: the stats apply to the whole volume.
+     */
+    public async statfs(_path = '/'): Promise<KvFilesystemStat> {
+        return await this.fs.getFilesystem().statfs();
     }
 
     /** Resolve `fh` to its open-file record; throws `EBADF` if unknown. */

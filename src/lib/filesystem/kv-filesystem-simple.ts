@@ -21,6 +21,16 @@ export class KvFilesystemSimple {
         this.separator = separator;
     }
 
+    /**
+     * Escape hatch back to the lower-level `KvFilesystem`. Callers
+     * that need the inode-shaped API (volume-level `statfs`, raw
+     * `flush` / `fsync`, etc.) — the FUSE adapter is the canonical
+     * one — can grab it without going through every path-based wrapper.
+     */
+    public getFilesystem(): KvFilesystem {
+        return this.filesystem;
+    }
+
     // File operations
 
     public async createFile(pathName: string): Promise<KvINodeFile> {

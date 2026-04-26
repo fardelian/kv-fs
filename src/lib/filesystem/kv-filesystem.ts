@@ -21,6 +21,22 @@ import { Init, KvError_FS_Exists, KvError_FS_NotEmpty } from '../utils';
 export type KvWriteMode = 'truncate' | 'append' | 'partial';
 
 /**
+ * Volume-level statistics, the shape callers want for `df` /
+ * `statfs(2)` / `fs.statSync` against a FUSE mount. Sizes are reported
+ * in blocks of {@link blockSize} bytes; multiply to get bytes.
+ *
+ * `usedBlocks` is computed as `highestBlockId + 1` (the conservative
+ * upper bound — the actual count is between the chain length and the
+ * high-water mark depending on backend free-list behaviour).
+ */
+export interface KvFilesystemStat {
+    blockSize: number;
+    totalBlocks: number;
+    usedBlocks: number;
+    freeBlocks: number;
+}
+
+/**
  * Core filesystem: walks the superblock + inode tree on top of any
  * `KvBlockDevice`. Operations take an explicit parent directory; for
  * the path-walking facade see `KvFilesystemSimple`.
@@ -134,6 +150,60 @@ export class KvFilesystem {
                 break;
         }
         await file.write(data);
+    }
+
+    /**
+     * Flush any buffered file state to the backing block device. Stub
+     * for now — every `write` / `writePartial` already commits straight
+     * through to the block device, so there's nothing to flush, but
+     * FUSE bindings call this on every `close(2)` and expect a method
+     * here. Kept on `KvFilesystem` so the future case where we *do*
+     * buffer (per-file dirty-page cache, batched journal flush, etc.)
+     * has a single hook to fill in.
+     */
+    @Init
+    public async flush(_file: KvINodeFile): Promise<void> {
+        // No-op: writes are write-through.
+    }
+
+    /**
+     * Force previously-written data on `file` to durable storage.
+     * Stub — the block device contract doesn't currently surface a
+     * `sync` primitive, so nothing further is forced beyond what
+     * `writeBlock` already did. Hook for future durability work.
+     */
+    @Init
+    public async fsync(_file: KvINodeFile): Promise<void> {
+        // No-op: writes are write-through; no durability boundary exposed yet.
+    }
+
+    /**
+     * Update an inode's modification time. Mirrors the mtime half of
+     * POSIX `utimens(2)`. The kv-fs inode header doesn't carry an
+     * atime, so callers that supply one should expect it to be
+     * ignored; this method only persists `modificationTime`.
+     */
+    @Init
+    public async touch(
+        inode: KvINodeFile | KvINodeDirectory,
+        modificationTime: Date,
+    ): Promise<void> {
+        await inode.touch(modificationTime);
+    }
+
+    /**
+     * Volume-level stat info. `df` / `statfs(2)` shape: total /
+     * used / free blocks, plus the block size to multiply by. Read
+     * live from the block device — never cache.
+     */
+    @Init
+    public async statfs(): Promise<KvFilesystemStat> {
+        const blockSize = this.blockDevice.getBlockSize();
+        const totalBlocks = this.blockDevice.getCapacityBlocks();
+        const highest = await this.blockDevice.getHighestBlockId();
+        const usedBlocks = Math.max(0, highest + 1);
+        const freeBlocks = Math.max(0, totalBlocks - usedBlocks);
+        return { blockSize, totalBlocks, usedBlocks, freeBlocks };
     }
 
     /** Remove a file from `directory` and free all of its data blocks. */

@@ -107,7 +107,28 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
     public async write(newEntries: DirectoryEntriesList): Promise<void> {
         this.entries = newEntries;
         this.modificationTime = new Date();
+        await this.persistEntries();
+    }
 
+    /**
+     * Update the directory's modification time and persist it. Used by
+     * `KvFilesystem.touch` so callers can set timestamps without
+     * re-keying the entries map. atime isn't stored in the header, so
+     * callers ignore it.
+     */
+    @Init
+    public async touch(modificationTime: Date): Promise<void> {
+        this.modificationTime = modificationTime;
+        await this.persistEntries();
+    }
+
+    /**
+     * Serialize the in-memory `entries` (and current `modificationTime`)
+     * back to the inode + continuation block chain. Factored out of
+     * `write` so `touch` can persist a modificationTime without
+     * having to round-trip the entries through the public API.
+     */
+    private async persistEntries(): Promise<void> {
         const blockSize = this.blockDevice.getBlockSize();
         const firstBlockEntryArea = blockSize
             - KvINodeDirectory.OFFSET_FIRST_ENTRY

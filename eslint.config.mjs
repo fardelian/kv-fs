@@ -59,6 +59,21 @@ export default tseslint.config(
             // current function on the stack trace and inside the right
             // try/catch frame.
             '@typescript-eslint/return-await': ['error', 'always'],
+
+            // Honour the leading-underscore convention for "this param
+            // exists for the contract but I'm not using it" — the
+            // strict preset's default flags `_param` unless the rule is
+            // restated with the ignore patterns. Common case here: FUSE
+            // / abstract-class signatures with kept-but-unused args.
+            '@typescript-eslint/no-unused-vars': ['error', {
+                args: 'all',
+                argsIgnorePattern: '^_',
+                caughtErrors: 'all',
+                caughtErrorsIgnorePattern: '^_',
+                destructuredArrayIgnorePattern: '^_',
+                varsIgnorePattern: '^_',
+                ignoreRestSiblings: true,
+            }],
         },
     },
 

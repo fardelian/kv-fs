@@ -26,8 +26,8 @@
 import { stat } from 'fs/promises';
 import { mkdirSync } from 'fs';
 import { randomBytes } from 'crypto';
-import { AsyncDatabase } from 'promised-sqlite3';
-import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
+import { Database } from 'bun:sqlite';
+import { KvBlockDeviceSqlite3, wrapBunSqliteDatabase } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvFuseHandlers } from '../lib/fuse';
 
@@ -43,13 +43,14 @@ const DB_PATH = `${LOCAL_FS_PATH}/data.sqlite3`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run(): Promise<void> {
-    const database = await AsyncDatabase.open(DB_PATH);
+    const database = new Database(DB_PATH);
+    const driver = wrapBunSqliteDatabase(database);
     try {
         // ---- 1. Mount the kv-fs on top of a fresh SQLite table ----
         const blockDevice = new KvBlockDeviceSqlite3(
             BLOCK_SIZE,
             BLOCK_SIZE * TOTAL_BLOCKS,
-            database,
+            driver,
             TABLE_NAME,
         );
 
@@ -103,7 +104,7 @@ async function run(): Promise<void> {
         const dbStat = await stat(DB_PATH);
         console.log(fmtRow(DB_PATH.replace(`${LOCAL_FS_PATH}/`, ''), dbStat.size, dbStat.birthtime));
     } finally {
-        await database.close();
+        await driver.close();
     }
 }
 

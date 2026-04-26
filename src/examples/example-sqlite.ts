@@ -1,9 +1,9 @@
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
-import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
+import { KvBlockDeviceSqlite3, wrapBunSqliteDatabase } from '../lib/block-devices';
 import { KvEncryptionRot13 } from '../lib/encryption';
 import { mkdirSync } from 'fs';
 import { KvEncryptedBlockDevice } from '../lib/block-devices';
-import { AsyncDatabase } from 'promised-sqlite3';
+import { Database } from 'bun:sqlite';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -21,12 +21,13 @@ async function run() {
 
     const encryption = new KvEncryptionRot13();
 
-    const database = await AsyncDatabase.open(`${LOCAL_FS_PATH}/data.sqlite3`);
+    const database = new Database(`${LOCAL_FS_PATH}/data.sqlite3`);
+    const driver = wrapBunSqliteDatabase(database);
 
     const sqliteBlockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
         BLOCK_SIZE * TOTAL_BLOCKS,
-        database,
+        driver,
         'blocks',
     );
 

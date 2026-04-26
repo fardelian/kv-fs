@@ -45,6 +45,8 @@
     "sqlite3": "6.0.1"
   },
   "trustedDependencies": [
-    "@cocalc/fuse-native"
+    "@cocalc/fuse-native",
+    "sqlite3",
+    "esbuild"
   ]
 }

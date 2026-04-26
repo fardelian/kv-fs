@@ -27,6 +27,8 @@
     },
   },
   "trustedDependencies": [
+    "esbuild",
+    "sqlite3",
     "@cocalc/fuse-native",
   ],
   "overrides": {

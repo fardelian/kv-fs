@@ -366,4 +366,53 @@ export abstract class KvBlockDevice {
      * superblock.
      */
     public abstract format(): Promise<void>;
+
+    // ---- Optimistic concurrency (per-block CAS) ----
+    //
+    // Versions are tracked in-memory on the base class. Each call to
+    // {@link writeBlockIfMatch} that succeeds bumps the version for that
+    // block ID. A regular {@link writeBlock} call does *not* touch the
+    // version — callers using CAS must use writeBlockIfMatch consistently
+    // for any block they care about.
+    //
+    // For multi-client / networked use, the canonical version comes
+    // from whichever process owns the storage (e.g. the HTTP server's
+    // KvBlockDevice instance). Other clients should fetch the version
+    // via getBlockVersion() before writing.
+
+    private readonly blockVersions = new Map<INodeId, number>();
+
+    /**
+     * Current version for a block. Starts at `0` and is bumped on every
+     * successful {@link writeBlockIfMatch}. Clients pass this value as
+     * `expectedVersion` to detect concurrent modification.
+     */
+    public async getBlockVersion(blockId: INodeId): Promise<number> {
+        return await Promise.resolve(this.blockVersions.get(blockId) ?? 0);
+    }
+
+    /**
+     * Write `data` to `blockId` only if the stored version matches
+     * `expectedVersion`. Returns the new version on success; returns
+     * `null` if the version no longer matches (somebody else wrote
+     * since you read).
+     *
+     * Use this to layer optimistic concurrency on top of the basic
+     * {@link writeBlock} primitive — fetch the version, build your new
+     * payload, then call writeBlockIfMatch. Retry on `null`.
+     */
+    public async writeBlockIfMatch(
+        blockId: INodeId,
+        expectedVersion: number,
+        data: Uint8Array,
+    ): Promise<number | null> {
+        const current = this.blockVersions.get(blockId) ?? 0;
+        if (current !== expectedVersion) {
+            return null;
+        }
+        await this.writeBlock(blockId, data);
+        const next = current + 1;
+        this.blockVersions.set(blockId, next);
+        return next;
+    }
 }

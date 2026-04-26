@@ -458,6 +458,63 @@ describe('KvINodeFile', () => {
         });
     });
 
+    describe('readPartial / writePartial — sub-block paths', () => {
+        it('readPartial of a sub-block range routes through readBlockPartial', async () => {
+            const { file } = await makeFile();
+            const total = BLOCK_SIZE * 2;
+            await file.write(pattern(total));
+
+            // Range [10, 30) is entirely inside block 0 and is shorter than
+            // BLOCK_SIZE — hits the `sliceLen !== blockSize` else branch
+            // that calls readBlockPartial.
+            const slice = await file.readPartial(10, 20);
+
+            expect(slice.length).toBe(20);
+            expect(Array.from(slice)).toEqual(
+                Array.from(pattern(total).subarray(10, 30)),
+            );
+        });
+
+        it('writePartial of a sub-block range routes through writeBlockPartial', async () => {
+            const { file } = await makeFile();
+            await file.write(pattern(BLOCK_SIZE * 2));
+            const before = pattern(BLOCK_SIZE * 2);
+
+            // offset=10, length=20: stays inside block 0 and is sub-block —
+            // hits the `offsetInBlock === 0 && writeLen === blockSize`
+            // else branch that calls writeBlockPartial.
+            const replacement = pattern(20, 0xa5);
+            await file.writePartial(10, replacement);
+
+            const head = await file.readPartial(0, BLOCK_SIZE);
+            const expectedHead = new Uint8Array(BLOCK_SIZE);
+            expectedHead.set(before.subarray(0, BLOCK_SIZE));
+            expectedHead.set(replacement, 10);
+            expect(Array.from(head)).toEqual(Array.from(expectedHead));
+            // Bytes outside the sub-block range are untouched.
+            const tail = await file.readPartial(BLOCK_SIZE, BLOCK_SIZE);
+            expect(Array.from(tail)).toEqual(
+                Array.from(before.subarray(BLOCK_SIZE)),
+            );
+        });
+
+        it('writePartial extending past EOF resizes the file (zero-filling the gap)', async () => {
+            const { file } = await makeFile();
+            await file.write(pattern(10));
+
+            // offset 100 > size 10 → triggers the `endPos > this.size` →
+            // `await this.resize(endPos)` branch. The gap [10, 100) must
+            // read back as zeros.
+            await file.writePartial(100, new Uint8Array([7, 7, 7]));
+
+            expect(file.size).toBe(103);
+            const gap = await file.readPartial(10, 90);
+            expect(Array.from(gap)).toEqual(Array.from(new Uint8Array(90)));
+            const tail = await file.readPartial(100, 3);
+            expect(Array.from(tail)).toEqual([7, 7, 7]);
+        });
+    });
+
     describe('indirect block (files larger than the inline direct-pointer area)', () => {
         // 256-byte blocks keeps the direct/indirect math comfortably small
         // for tests while leaving real headroom — (256 - 32 - 4) / 4 = 55

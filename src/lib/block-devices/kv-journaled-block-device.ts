@@ -166,8 +166,11 @@ export class KvJournaledBlockDevice extends KvBlockDevice {
     }
 
     private async markCommitted(seq: number): Promise<void> {
-        const record = this.records.find((r) => r.seq === seq);
-        if (record) record.committed = true;
+        // `seq` always comes from a prior `append()` that pushed the
+        // record into `this.records`, and records are never removed —
+        // so `find` is guaranteed to return a hit.
+        const record = this.records.find((r) => r.seq === seq)!;
+        record.committed = true;
         await this.flushJournal();
     }
 

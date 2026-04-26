@@ -246,6 +246,86 @@ describe('KvFilesystem.statfs', () => {
     });
 });
 
+describe('KvFilesystem.read', () => {
+    it('without start, reads from the current cursor and advances it', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+        await fs.write(file, new Uint8Array([1, 2, 3, 4, 5]));
+        await file.setPos(1);
+
+        const out = await fs.read(file, undefined, 3);
+
+        expect(Array.from(out)).toEqual([2, 3, 4]);
+        expect(file.getPos()).toBe(4);
+    });
+
+    it('with start, seeks before reading', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+        await fs.write(file, new Uint8Array([1, 2, 3, 4, 5]));
+
+        const out = await fs.read(file, 2, 2);
+
+        expect(Array.from(out)).toEqual([3, 4]);
+    });
+
+    it('caps start at file.size — seeking past EOF stays read-only', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+        await fs.write(file, new Uint8Array([1, 2, 3]));
+        const sizeBefore = file.size;
+
+        const out = await fs.read(file, 999, 10);
+
+        expect(out.length).toBe(0);
+        expect(file.size).toBe(sizeBefore);
+    });
+});
+
+describe('KvFilesystem.write', () => {
+    it('truncate mode (default) clears the file before writing', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+        await fs.write(file, new Uint8Array([1, 2, 3, 4, 5]));
+
+        await fs.write(file, new Uint8Array([9, 9]));
+
+        const reopened = await fs.getKvFile('a.txt', root);
+        const out = await reopened.readPartial(0, 100);
+        expect(Array.from(out)).toEqual([9, 9]);
+    });
+
+    it('append mode writes at file.size and grows the file', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+        await fs.write(file, new Uint8Array([1, 2, 3]));
+
+        await fs.write(file, new Uint8Array([4, 5]), 'append');
+
+        expect(file.size).toBe(5);
+        const out = await fs.read(file, 0, 5);
+        expect(Array.from(out)).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('partial mode splices at the given offset, leaving surrounding bytes intact', async () => {
+        const fs = await makeFs();
+        const root = await fs.getRootDirectory();
+        const file = await fs.createFile('a.txt', root);
+        await fs.write(file, new Uint8Array([1, 2, 3, 4, 5]));
+
+        await fs.write(file, new Uint8Array([8, 8]), 'partial', 2);
+
+        expect(file.size).toBe(5);
+        const out = await fs.read(file, 0, 5);
+        expect(Array.from(out)).toEqual([1, 2, 8, 8, 5]);
+    });
+});
+
 describe('KvFilesystem.touch', () => {
     it('updates a file inode\'s modificationTime and persists it', async () => {
         const fs = await makeFs();

@@ -125,12 +125,12 @@ export class KvCachedBlockDevice extends KvBlockDevice {
     private put(blockId: INodeId, data: Uint8Array): void {
         // Evict the LRU entry if we're at capacity and this would be a
         // new key. (If `blockId` is already cached, the delete-then-set
-        // a few lines down doesn't grow the size.)
+        // a few lines down doesn't grow the size.) `maxBlocks >= 1` is
+        // enforced in the constructor, so when `size >= maxBlocks` the
+        // map has at least one key — `keys().next().value` is non-null.
         if (!this.cache.has(blockId) && this.cache.size >= this.maxBlocks) {
-            const lruKey = this.cache.keys().next().value;
-            if (lruKey !== undefined) {
-                this.cache.delete(lruKey);
-            }
+            const lruKey = this.cache.keys().next().value!;
+            this.cache.delete(lruKey);
         }
         // Move to MRU position regardless of whether it was already there.
         this.cache.delete(blockId);

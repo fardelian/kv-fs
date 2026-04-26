@@ -20,6 +20,10 @@ export default {
         '^.+\\.ts$': ['ts-jest', { useESM: true }],
     },
     testMatch: ['<rootDir>/src/**/*.test.ts'],
+    // Acceptance tests are gated behind the `test:acceptance` script — they
+    // hit real side effects (filesystem, sqlite, FUSE) and must not run as
+    // part of the default unit suite or the coverage gate.
+    testPathIgnorePatterns: ['/node_modules/', '<rootDir>/src/acceptance/'],
     coverageDirectory: '.coverage',
     // istanbul (jest's default) gives function-level coverage that mirrors
     // ts-jest's transformed sources; v8 over-counts barrel re-exports and

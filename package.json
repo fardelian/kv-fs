@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=acceptance",
-    "test:coverage": "rm -rf .coverage && node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathIgnorePatterns=/node_modules/ --testPathPatterns=acceptance",
+    "test:unit:coverage": "rm -rf .coverage && node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "start-local-fs": "tsx src/examples/example-local-fs.ts",
     "start-memory": "tsx src/examples/example-memory.ts",
     "start-sqlite": "tsx src/examples/example-sqlite.ts",
@@ -25,13 +25,13 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@faker-js/faker": "10.4.0",
-    "@jest/globals": "29.7.0",
+    "@jest/globals": "30.3.0",
     "@stylistic/eslint-plugin": "5.10.0",
     "@types/express": "5.0.6",
-    "@types/jest": "29.5.14",
+    "@types/jest": "30.0.0",
     "@types/node": "25.6.0",
     "eslint": "10.2.1",
-    "jest": "29.7.0",
+    "jest": "30.3.0",
     "ts-jest": "29.4.9",
     "tsx": "4.20.6",
     "typescript": "6.0.3",
@@ -45,6 +45,8 @@
     "@cocalc/fuse-native": "2.4.3"
   },
   "overrides": {
-    "sqlite3": "6.0.1"
+    "sqlite3": "6.0.1",
+    "babel-plugin-istanbul": "^8.0.2",
+    "glob": "^13.0.0"
   }
 }

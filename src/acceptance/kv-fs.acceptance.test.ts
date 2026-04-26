@@ -42,8 +42,8 @@ describe('kv-filesystem (acceptance)', () => {
         // ---- 1. Format edge cases ----
         {
             const tinyDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * 4);
-            await expect(KvFilesystem.format(tinyDevice, 0)).rejects.toThrowError(RangeError);
-            await expect(KvFilesystem.format(tinyDevice, 1000)).rejects.toThrowError(RangeError);
+            await expect(KvFilesystem.format(tinyDevice, 0)).rejects.toThrow(RangeError);
+            await expect(KvFilesystem.format(tinyDevice, 1000)).rejects.toThrow(RangeError);
         }
 
         // ---- 2. Format + open a real volume ----

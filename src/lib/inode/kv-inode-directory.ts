@@ -230,6 +230,21 @@ export class KvINodeDirectory extends INode<DirectoryEntriesList> {
         return this.entries.has(name);
     }
 
+    /**
+     * Free every block this directory owns: continuation chain + the
+     * inode block itself. Caller is responsible for removing the
+     * directory's entry from its parent first.
+     */
+    @Init
+    public async unlink(): Promise<void> {
+        for (const id of this.continuationBlockIds) {
+            await this.blockDevice.freeBlock(id);
+        }
+        this.continuationBlockIds = [];
+        await this.blockDevice.freeBlock(this.id);
+        this.entries.clear();
+    }
+
     public static async createEmptyDirectory(blockDevice: KvBlockDevice, blockId: INodeId): Promise<KvINodeDirectory> {
         const buffer = new Uint8Array(blockDevice.getBlockSize());
         const view = dataView(buffer);

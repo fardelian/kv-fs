@@ -285,6 +285,100 @@ describe('KvBlockDeviceHttpRouter', () => {
         });
     });
 
+    describe('POST /blocks/batch', () => {
+        it('runs read/write/free ops via the device and returns hex-encoded read results', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+            blockDevice.readBlock.mockResolvedValueOnce(new Uint8Array([0xaa, 0xbb]));
+            blockDevice.writeBlock.mockResolvedValueOnce(undefined);
+            blockDevice.freeBlock.mockResolvedValueOnce(undefined);
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: {
+                    ops: [
+                        { op: 'read', blockId: 1 },
+                        { op: 'write', blockId: 2, data: '010203' },
+                        { op: 'free', blockId: 3 },
+                    ],
+                },
+            });
+
+            expect(blockDevice.readBlock).toHaveBeenCalledWith(1);
+            const [writeId, writeData] = blockDevice.writeBlock.mock.calls[0];
+            expect(writeId).toBe(2);
+            expect(Array.from(writeData)).toEqual([0x01, 0x02, 0x03]);
+            expect(blockDevice.freeBlock).toHaveBeenCalledWith(3);
+
+            expect(res.body).toEqual({
+                results: [
+                    { ok: true, data: 'aabb' },
+                    { ok: true },
+                    { ok: true },
+                ],
+            });
+        });
+
+        it('captures per-op errors as { ok: false, error }', async () => {
+            const { blockDevice, fakeRouter } = makeRouter();
+            blockDevice.readBlock.mockRejectedValueOnce(new Error('disk gone'));
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'read', blockId: 0 }] },
+            });
+
+            expect(res.body).toEqual({ results: [{ ok: false, error: 'disk gone' }] });
+        });
+
+        it('returns 400 when the body is not a JSON object with an ops array', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', { body: undefined });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'Expected { ops: [...] } JSON body.' });
+        });
+
+        it('returns 400 when ops is not an array', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', { body: { ops: 'not-array' } });
+
+            expect(res.statusCode).toBe(400);
+        });
+
+        it('returns 400 when an op is missing a numeric blockId', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'read', blockId: 'oops' }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'Each op needs a numeric blockId.' });
+        });
+
+        it('returns 400 when a write op is missing the hex data field', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'write', blockId: 0 }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'Write op requires hex `data`.' });
+        });
+
+        it('returns 400 for an unknown op kind', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 'unknown', blockId: 0 }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'Unknown op: unknown' });
+        });
+    });
+
     describe('DELETE /blocks/:blockId (free)', () => {
         it('frees the block at the given id and returns 204', async () => {
             const { blockDevice, fakeRouter } = makeRouter();

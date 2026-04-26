@@ -100,6 +100,19 @@ export class KvFilesystemSimple {
         await this.filesystem.unlink(leaf, parent);
     }
 
+    /** Remove an empty directory at `pathName`. Mirrors POSIX `rmdir`. */
+    public async removeDirectory(pathName: string): Promise<void> {
+        const { parent, leaf } = await this.resolveLeaf(pathName);
+        await this.filesystem.removeDirectory(leaf, parent);
+    }
+
+    /** Rename or move a file/directory from `fromPath` to `toPath`. */
+    public async rename(fromPath: string, toPath: string): Promise<void> {
+        const from = await this.resolveLeaf(fromPath);
+        const to = await this.resolveLeaf(toPath);
+        await this.filesystem.rename(from.leaf, from.parent, to.leaf, to.parent);
+    }
+
     /**
      * Split an absolute path into its non-empty components, dropping the
      * leading separator and any empty segments produced by leading,

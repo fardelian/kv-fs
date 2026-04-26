@@ -209,6 +209,47 @@ describe('KvBlockDeviceHttpClient', () => {
         });
     });
 
+    describe('batch', () => {
+        it('POSTs /blocks/batch with hex-encoded write payloads and decodes hex read responses', async () => {
+            mockFetch.mockResolvedValueOnce(metadataResponse());
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                body: {
+                    results: [
+                        { ok: true, data: 'aabb' },
+                        { ok: true },
+                        { ok: false, error: 'gone' },
+                        { ok: false }, // exercises the "unknown error" fallback
+                    ],
+                },
+            }));
+
+            const client = new KvBlockDeviceHttpClient(BASE_URL);
+            const results = await client.batch([
+                { op: 'read', blockId: 1 },
+                { op: 'write', blockId: 2, data: new Uint8Array([0x01, 0x02, 0x03]) },
+                { op: 'free', blockId: 3 },
+                { op: 'read', blockId: 4 },
+            ]);
+
+            const [url, init] = mockFetch.mock.calls[1];
+            expect(url).toBe(`${BASE_URL}/blocks/batch`);
+            expect(init!.method).toBe('POST');
+            expect(init!.headers).toEqual({ 'Content-Type': 'application/json' });
+            const sentBody = JSON.parse(init!.body as string) as { ops: { op: string; blockId: number; data?: string }[] };
+            expect(sentBody.ops).toEqual([
+                { op: 'read', blockId: 1 },
+                { op: 'write', blockId: 2, data: '010203' },
+                { op: 'free', blockId: 3 },
+                { op: 'read', blockId: 4 },
+            ]);
+
+            expect(results[0]).toEqual({ ok: true, data: new Uint8Array([0xaa, 0xbb]) });
+            expect(results[1]).toEqual({ ok: true });
+            expect(results[2]).toEqual({ ok: false, error: 'gone' });
+            expect(results[3]).toEqual({ ok: false, error: 'unknown error' });
+        });
+    });
+
     describe('format', () => {
         it('issues DELETE /blocks?confirm=yes (does not require init)', async () => {
             mockFetch.mockResolvedValueOnce(jsonResponse({ body: { data: { confirm: 'yes' } } }));

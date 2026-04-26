@@ -14,7 +14,7 @@ import { KvEncryption } from './kv-encryption';
  * constructor (see {@link KvEncryptionRot13}); ad-hoc callers may
  * instantiate `KvEncryptionCaesar` directly with any integer shift.
  */
-export class KvEncryptionCaesar extends KvEncryption {
+export class KvEncryptionCaesar implements KvEncryption {
     /** Number of letters in the Latin alphabet. Codified circa 700 BCE. */
     private static readonly ALPHABET_SIZE = 26;
 
@@ -22,8 +22,6 @@ export class KvEncryptionCaesar extends KvEncryption {
     private readonly reverseShift: number;
 
     constructor(shift: number) {
-        super();
-
         // Normalize arbitrary integers (including negatives) into the
         // canonical [0, ALPHABET_SIZE) range.
         const size = KvEncryptionCaesar.ALPHABET_SIZE;

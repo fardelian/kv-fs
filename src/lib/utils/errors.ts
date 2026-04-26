@@ -1,5 +1,11 @@
+// Empty subclasses below carry pass-through constructors that look
+// "useless" but exist on purpose: Bun's coverage tracker counts the
+// synthesized constructor of `class X extends Y {}` as a separate
+// uncovered function, so making it explicit gets each subclass to 100%.
+/* eslint-disable @typescript-eslint/no-useless-constructor */
+
 /** Base class for every kv-fs error; subclasses set `name` from `new.target`. */
-abstract class KvError extends Error {
+export class KvError extends Error {
     constructor(message: string) {
         super(message);
         Object.setPrototypeOf(this, new.target.prototype);
@@ -20,18 +26,39 @@ export class KvError_BD_Overflow extends KvError {
 }
 
 export class KvError_BD_NotFound extends KvError {
+    constructor(message: string) {
+        super(message);
+    }
 }
 
 export class KvError_INode_NameOverflow extends KvError {
+    constructor(message: string) {
+        super(message);
+    }
 }
 
 export class KvError_Enc_Key extends KvError {
+    constructor(message: string) {
+        super(message);
+    }
 }
 
 export class KvError_FS_Exists extends KvError {
+    constructor(message: string) {
+        super(message);
+    }
 }
 
 export class KvError_FS_NotFound extends KvError {
+    constructor(message: string) {
+        super(message);
+    }
+}
+
+export class KvError_FS_NotEmpty extends KvError {
+    constructor(message: string) {
+        super(message);
+    }
 }
 
 export class KvError_FS_FormatVersion extends KvError {

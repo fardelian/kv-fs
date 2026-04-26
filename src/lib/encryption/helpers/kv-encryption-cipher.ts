@@ -15,7 +15,7 @@ const AES_BLOCK_BYTES = 16;
  * than the constructor here, so password-derived classes can run the
  * KDF before installing the key.
  */
-export abstract class KvEncryptionCipher extends KvEncryption {
+export abstract class KvEncryptionCipher implements KvEncryption {
     protected readonly algorithm: CipherGCMTypes;
     protected readonly keyLengthBytes: number;
     protected readonly ivLengthBytes: number;
@@ -29,8 +29,6 @@ export abstract class KvEncryptionCipher extends KvEncryption {
         ivLengthBytes: number,
         keyPasswordDigest: string,
     ) {
-        super();
-
         // TODO: Switch from CBC to GCM
         this.algorithm = algorithm as CipherGCMTypes;
         this.keyLengthBytes = keyLengthBytes;

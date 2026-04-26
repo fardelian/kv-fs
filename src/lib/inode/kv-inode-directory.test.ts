@@ -34,6 +34,40 @@ async function reopen(device: KvBlockDeviceMemory, blockId: number): Promise<KvI
 }
 
 describe('KvINodeDirectory', () => {
+    describe('unlink', () => {
+        it('frees the inode block of an empty directory', async () => {
+            const { device, dir, blockId } = await makeDir();
+            expect(device._dumpBlocks().length).toBe(1);
+
+            await dir.unlink();
+
+            expect(await device.existsBlock(blockId)).toBe(false);
+            expect(device._dumpBlocks().length).toBe(0);
+        });
+
+        it('frees both the inode and every continuation block of a chained directory', async () => {
+            const { device, dir, blockId } = await makeDir();
+
+            // Push past the first-block capacity so a continuation chain
+            // exists when we unlink.
+            const NAME_LENGTH = 1000;
+            const longName = (i: number): string => {
+                const suffix = String(i).padStart(4, '0');
+                return 'x'.repeat(NAME_LENGTH - suffix.length) + suffix;
+            };
+            for (let i = 0; i < 8; i++) {
+                await dir.addEntry(longName(i), 100 + i);
+            }
+            // Sanity: at least one continuation block was allocated.
+            expect(device._dumpBlocks().length).toBeGreaterThan(1);
+
+            await dir.unlink();
+
+            expect(await device.existsBlock(blockId)).toBe(false);
+            expect(device._dumpBlocks().length).toBe(0);
+        });
+    });
+
     describe('basic operations', () => {
         it('starts empty', async () => {
             const { dir } = await makeDir();

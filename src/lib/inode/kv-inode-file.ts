@@ -46,11 +46,6 @@ export class KvINodeFile extends INode<Uint8Array> {
         );
     }
 
-    /** Number of data block IDs that fit in one indirect block (one uint32 per slot). */
-    public maxIndirectBlocks(): number {
-        return Math.floor(this.blockDevice.getBlockSize() / KvINodeFile.DATA_BLOCK_ID_SIZE);
-    }
-
     async init(): Promise<void> {
         await super.init();
 

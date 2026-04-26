@@ -21,7 +21,7 @@ async function run() {
         BLOCK_SIZE,
         BLOCK_SIZE * TOTAL_BLOCKS,
         database,
-        'blocks',
+        'blocks_permanent',
     );
 
     // Create file system if it doesn't exist

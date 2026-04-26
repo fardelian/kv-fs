@@ -171,17 +171,65 @@ describe('KvFuseHandlers', () => {
             expect(dec.decode(data)).toBe('hello');
         });
 
-        it('rmdir returns ENOSYS (POC: directory removal not yet supported)', async () => {
+        it('rmdir removes an empty directory', async () => {
             const { fs, handlers } = await makeHandlers();
             await fs.createDirectory('/d');
 
-            await expect(handlers.rmdir('/d')).rejects.toMatchObject({ code: 'ENOSYS' });
+            await handlers.rmdir('/d');
+
+            expect(await fs.readDirectory('/')).not.toContain('d');
         });
 
-        it('rename returns ENOSYS (POC: not yet supported)', async () => {
-            const { handlers } = await makeHandlers();
+        it('rmdir returns ENOTEMPTY when the directory still has entries', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createDirectory('/d', true);
+            await fs.createFile('/d/file.txt');
 
-            await expect(handlers.rename('/a', '/b')).rejects.toMatchObject({ code: 'ENOSYS' });
+            await expect(handlers.rmdir('/d')).rejects.toMatchObject({ code: 'ENOTEMPTY' });
+        });
+
+        it('rmdir returns ENOENT for a missing path', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.rmdir('/missing')).rejects.toMatchObject({ code: 'ENOENT' });
+        });
+
+        it('rename moves a file within the same directory', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/old.txt');
+            await fs.writeFile('/old.txt', enc.encode('hello'));
+
+            await handlers.rename('/old.txt', '/new.txt');
+
+            expect(await fs.readDirectory('/')).toContain('new.txt');
+            expect(await fs.readDirectory('/')).not.toContain('old.txt');
+            expect(dec.decode(await fs.readFile('/new.txt'))).toBe('hello');
+        });
+
+        it('rename moves a file across directories', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createDirectory('/a', true);
+            await fs.createDirectory('/b', true);
+            await fs.createFile('/a/note.txt');
+            await fs.writeFile('/a/note.txt', enc.encode('payload'));
+
+            await handlers.rename('/a/note.txt', '/b/note.txt');
+
+            expect(await fs.readDirectory('/a')).not.toContain('note.txt');
+            expect(await fs.readDirectory('/b')).toContain('note.txt');
+            expect(dec.decode(await fs.readFile('/b/note.txt'))).toBe('payload');
+        });
+
+        it('rename returns EEXIST when the destination already exists', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+            await fs.createFile('/b.txt');
+
+            await expect(handlers.rename('/a.txt', '/b.txt')).rejects.toMatchObject({ code: 'EEXIST' });
+        });
+
+        it('rename returns ENOENT when the source is missing', async () => {
+            const { handlers } = await makeHandlers();
+            await expect(handlers.rename('/nope.txt', '/b.txt')).rejects.toMatchObject({ code: 'ENOENT' });
         });
     });
 

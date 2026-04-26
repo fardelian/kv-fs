@@ -95,4 +95,150 @@ describe('KvBlockDevice (base)', () => {
             expect(device.getCapacityBlocks()).toBe(0);
         });
     });
+
+    describe('batch (default implementation)', () => {
+        it('dispatches read, write, and free ops in order', async () => {
+            const device = new MockBlockDevice(4096);
+            const payload = new Uint8Array([9, 9, 9]);
+            device.readBlock.mockResolvedValueOnce(payload);
+            device.writeBlock.mockResolvedValueOnce(undefined);
+            device.freeBlock.mockResolvedValueOnce(undefined);
+
+            const results = await device.batch([
+                { op: 'read', blockId: 1 },
+                { op: 'write', blockId: 2, data: new Uint8Array([1, 2]) },
+                { op: 'free', blockId: 3 },
+            ]);
+
+            expect(results).toHaveLength(3);
+            expect(results[0]).toEqual({ ok: true, data: payload });
+            expect(results[1]).toEqual({ ok: true });
+            expect(results[2]).toEqual({ ok: true });
+            expect(device.readBlock).toHaveBeenCalledWith(1);
+            expect(device.writeBlock).toHaveBeenCalledWith(2, new Uint8Array([1, 2]));
+            expect(device.freeBlock).toHaveBeenCalledWith(3);
+        });
+
+        it('captures per-op errors without aborting the batch', async () => {
+            const device = new MockBlockDevice(4096);
+            device.readBlock.mockRejectedValueOnce(new Error('boom'));
+            device.writeBlock.mockResolvedValueOnce(undefined);
+
+            const results = await device.batch([
+                { op: 'read', blockId: 1 },
+                { op: 'write', blockId: 2, data: new Uint8Array([0]) },
+            ]);
+
+            expect(results[0]).toEqual({ ok: false, error: 'boom' });
+            expect(results[1]).toEqual({ ok: true });
+        });
+
+        it('stringifies non-Error rejections', async () => {
+            const device = new MockBlockDevice(4096);
+            device.freeBlock.mockRejectedValueOnce('plain-string-error');
+
+            const results = await device.batch([{ op: 'free', blockId: 1 }]);
+
+            expect(results[0]).toEqual({ ok: false, error: 'plain-string-error' });
+        });
+
+        it('returns an empty result list for an empty batch', async () => {
+            const device = new MockBlockDevice(4096);
+            const results = await device.batch([]);
+            expect(results).toEqual([]);
+        });
+    });
+
+    describe('readBlocksWithDecoys', () => {
+        it('returns real reads in input order with no decoys requested', async () => {
+            const device = new MockBlockDevice(4096);
+            const a = new Uint8Array([1]);
+            const b = new Uint8Array([2]);
+            device.readBlock.mockImplementation(async (id) => {
+                if (id === 5) return a;
+                if (id === 9) return b;
+                throw new Error(`unexpected id ${id}`);
+            });
+
+            const result = await device.readBlocksWithDecoys([5, 9]);
+
+            expect(result).toEqual([a, b]);
+        });
+
+        it('mixes in decoys but still returns only the real reads', async () => {
+            const device = new MockBlockDevice(4096);
+            device.getHighestBlockId.mockResolvedValue(7);
+            const real = new Uint8Array([42]);
+            const decoy = new Uint8Array([0]);
+            device.readBlock.mockImplementation(async (id) => (id === 3 ? real : decoy));
+
+            const result = await device.readBlocksWithDecoys([3], 4);
+
+            expect(result).toEqual([real]);
+            expect(device.readBlock.mock.calls.length).toBe(5);
+        });
+
+        it('skips decoy generation when the device has no allocated blocks', async () => {
+            const device = new MockBlockDevice(4096);
+            device.getHighestBlockId.mockResolvedValue(-1);
+            device.readBlock.mockResolvedValue(new Uint8Array([1]));
+
+            const result = await device.readBlocksWithDecoys([0], 5);
+
+            expect(result).toHaveLength(1);
+            expect(device.readBlock).toHaveBeenCalledTimes(1);
+        });
+
+        it('throws when a real read fails inside the batch', async () => {
+            const device = new MockBlockDevice(4096);
+            device.readBlock.mockRejectedValue(new Error('disk gone'));
+
+            await expect(device.readBlocksWithDecoys([1])).rejects.toThrow(/Read of block 1 failed/);
+        });
+    });
+
+    describe('CAS (getBlockVersion / writeBlockIfMatch)', () => {
+        it('starts every block at version 0', async () => {
+            const device = new MockBlockDevice(4096);
+            expect(await device.getBlockVersion(0)).toBe(0);
+            expect(await device.getBlockVersion(99)).toBe(0);
+        });
+
+        it('writes when the expected version matches and returns the bumped version', async () => {
+            const device = new MockBlockDevice(4096);
+            device.writeBlock.mockResolvedValue(undefined);
+            const data = new Uint8Array([7]);
+
+            const next = await device.writeBlockIfMatch(1, 0, data);
+
+            expect(next).toBe(1);
+            expect(await device.getBlockVersion(1)).toBe(1);
+            expect(device.writeBlock).toHaveBeenCalledWith(1, data);
+        });
+
+        it('returns null without writing when the expected version is stale', async () => {
+            const device = new MockBlockDevice(4096);
+            device.writeBlock.mockResolvedValue(undefined);
+
+            await device.writeBlockIfMatch(1, 0, new Uint8Array([1])); // version → 1
+            const stale = await device.writeBlockIfMatch(1, 0, new Uint8Array([2]));
+
+            expect(stale).toBeNull();
+            expect(device.writeBlock).toHaveBeenCalledTimes(1);
+            expect(await device.getBlockVersion(1)).toBe(1);
+        });
+
+        it('bumps versions independently per block ID', async () => {
+            const device = new MockBlockDevice(4096);
+            device.writeBlock.mockResolvedValue(undefined);
+
+            await device.writeBlockIfMatch(1, 0, new Uint8Array([1]));
+            await device.writeBlockIfMatch(1, 1, new Uint8Array([2]));
+            await device.writeBlockIfMatch(2, 0, new Uint8Array([3]));
+
+            expect(await device.getBlockVersion(1)).toBe(2);
+            expect(await device.getBlockVersion(2)).toBe(1);
+            expect(await device.getBlockVersion(3)).toBe(0);
+        });
+    });
 });

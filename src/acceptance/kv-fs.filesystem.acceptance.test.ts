@@ -166,6 +166,36 @@ describe('kv-fs (acceptance)', () => {
         expect(finalHighWaterMark).toBeLessThan(peakHighWaterMark);
     });
 
+    it('rmdir + rename: rearrange a tree, contents preserved', async () => {
+        const fs = await makeFs();
+
+        await fs.createDirectory('/projects/alpha', true);
+        await fs.createDirectory('/projects/beta', true);
+        const file = await fs.createFile('/projects/alpha/notes.txt');
+        await file.write(encoder.encode('alpha-original'));
+
+        // Rename across directories — the file's bytes survive intact.
+        await fs.rename('/projects/alpha/notes.txt', '/projects/beta/notes.txt');
+        expect(await fs.readDirectory('/projects/alpha')).not.toContain('notes.txt');
+        expect(decoder.decode(await fs.readFile('/projects/beta/notes.txt'))).toBe('alpha-original');
+
+        // Now alpha is empty — rmdir should succeed.
+        await fs.removeDirectory('/projects/alpha');
+        expect(await fs.readDirectory('/projects')).not.toContain('alpha');
+        expect(await fs.readDirectory('/projects')).toContain('beta');
+
+        // Rename a directory itself; contents reachable via new path.
+        await fs.rename('/projects/beta', '/projects/gamma');
+        expect(await fs.readDirectory('/projects')).toEqual(['gamma']);
+        expect(decoder.decode(await fs.readFile('/projects/gamma/notes.txt'))).toBe('alpha-original');
+
+        // Cleanup: empty gamma, rmdir it, rmdir projects.
+        await fs.unlink('/projects/gamma/notes.txt');
+        await fs.removeDirectory('/projects/gamma');
+        await fs.removeDirectory('/projects');
+        expect(await fs.readDirectory('/')).not.toContain('projects');
+    });
+
     it('reports highestBlockId climbing as the filesystem allocates blocks', async () => {
         const blockDevice = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
 

@@ -1,6 +1,6 @@
 import { KvFilesystemSimple } from '../filesystem';
 import { KvError_INode_KindMismatch, KvINodeFile } from '../inode';
-import { KvError_FS_Exists, KvError_FS_NotFound } from '../utils';
+import { KvError_FS_Exists, KvError_FS_NotEmpty, KvError_FS_NotFound } from '../utils';
 
 /**
  * Subset of POSIX-ish file attributes that any FUSE binding's `getattr`
@@ -36,19 +36,21 @@ export class KvFuseError extends Error {
 
 /**
  * Errno codes:
- *   ENOENT — no such file/directory
- *   EEXIST — already exists
- *   EISDIR — is a directory
- *   ENOTDIR — is not a directory
- *   EBADF — bad file handle
- *   ENOSYS — not implemented
- *   EIO — I/O error
+ *   ENOENT    — no such file/directory
+ *   EEXIST    — already exists
+ *   EISDIR    — is a directory
+ *   ENOTDIR   — is not a directory
+ *   ENOTEMPTY — directory not empty (rmdir only)
+ *   EBADF     — bad file handle
+ *   ENOSYS    — not implemented
+ *   EIO       — I/O error
  */
 export type KvFuseErrorCode
     = 'ENOENT'
         | 'EEXIST'
         | 'EISDIR'
         | 'ENOTDIR'
+        | 'ENOTEMPTY'
         | 'EBADF'
         | 'ENOSYS'
         | 'EIO';
@@ -66,9 +68,6 @@ export type KvFuseErrorCode
  * own KvINodeFile cursor.
  *
  * **Limitations** (POC scaffold):
- * - No `rmdir` — the underlying KvFilesystem doesn't implement directory
- *   removal yet.
- * - No `rename` — same reason.
  * - No symlinks, hardlinks, xattrs.
  * - `getattr` returns synthetic mode/uid/gid since we don't track those.
  */
@@ -251,16 +250,39 @@ export class KvFuseHandlers {
         }
     }
 
-    /** `rmdir` — not yet supported by the underlying KvFilesystem. */
+    /** Remove an empty directory. POSIX `rmdir` semantics. */
     public async rmdir(path: string): Promise<void> {
-        await Promise.resolve();
-        throw new KvFuseError('ENOSYS', `rmdir of "${path}" is not implemented in KvFilesystem yet.`);
+        try {
+            await this.fs.removeDirectory(path);
+        } catch (err) {
+            if (err instanceof KvError_FS_NotFound) {
+                throw new KvFuseError('ENOENT', `Directory "${path}" not found.`);
+            }
+            if (err instanceof KvError_FS_NotEmpty) {
+                throw new KvFuseError('ENOTEMPTY', `Directory "${path}" is not empty.`);
+            }
+            throw new KvFuseError('EIO', err instanceof Error ? err.message : String(err));
+        }
     }
 
-    /** `rename` — not yet supported by the underlying KvFilesystem. */
+    /**
+     * Move or rename a file/directory. POSIX `rename(2)` semantics —
+     * but unlike POSIX, this implementation refuses to overwrite an
+     * existing destination (returns `EEXIST`); caller must clear it
+     * first.
+     */
     public async rename(from: string, to: string): Promise<void> {
-        await Promise.resolve();
-        throw new KvFuseError('ENOSYS', `rename of "${from}" → "${to}" is not implemented in KvFilesystem yet.`);
+        try {
+            await this.fs.rename(from, to);
+        } catch (err) {
+            if (err instanceof KvError_FS_NotFound) {
+                throw new KvFuseError('ENOENT', `Path "${from}" not found.`);
+            }
+            if (err instanceof KvError_FS_Exists) {
+                throw new KvFuseError('EEXIST', `Path "${to}" already exists.`);
+            }
+            throw new KvFuseError('EIO', err instanceof Error ? err.message : String(err));
+        }
     }
 
     /** Resolve `fh` to its open-file record; throws `EBADF` if unknown. */

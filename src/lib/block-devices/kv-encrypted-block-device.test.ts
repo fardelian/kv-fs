@@ -14,13 +14,12 @@ const INNER_CAPACITY_BYTES = INNER_BLOCK_SIZE * 16;
  * transform to verify the wrapper is calling `encrypt` on writes and
  * `decrypt` on reads.
  */
-class XorEncryption extends KvEncryption {
+class XorEncryption implements KvEncryption {
     public readonly overheadBytes: number;
     public readonly encrypt = jest.fn<KvEncryption['encrypt']>();
     public readonly decrypt = jest.fn<KvEncryption['decrypt']>();
 
     constructor(overheadBytes = 0) {
-        super();
         this.overheadBytes = overheadBytes;
         this.encrypt.mockImplementation(async (_blockId, data) => {
             const out = new Uint8Array(data.length + overheadBytes);

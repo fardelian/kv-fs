@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '.';
-import { KvError_FS_Exists, KvError_FS_NotFound } from '../utils';
+import { KvError_FS_Exists, KvError_FS_NotEmpty, KvError_FS_NotFound } from '../utils';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 256;
@@ -141,6 +141,71 @@ describe('KvFilesystemSimple', () => {
             const fs = await makeFs();
 
             await expect(fs.getKvFile('/missing.txt')).rejects.toBeInstanceOf(KvError_FS_NotFound);
+        });
+    });
+
+    describe('removeDirectory', () => {
+        it('removes an empty directory at a path', async () => {
+            const fs = await makeFs();
+            await fs.createDirectory('/parent/child', true);
+
+            await fs.removeDirectory('/parent/child');
+
+            expect(await fs.readDirectory('/parent')).not.toContain('child');
+        });
+
+        it('throws KvError_FS_NotEmpty when the directory still has entries', async () => {
+            const fs = await makeFs();
+            await fs.createDirectory('/parent', true);
+            await fs.createFile('/parent/note.txt');
+
+            await expect(fs.removeDirectory('/parent')).rejects.toBeInstanceOf(KvError_FS_NotEmpty);
+        });
+
+        it('throws KvError_FS_NotFound when the path does not exist', async () => {
+            const fs = await makeFs();
+
+            await expect(fs.removeDirectory('/missing')).rejects.toBeInstanceOf(KvError_FS_NotFound);
+        });
+    });
+
+    describe('rename', () => {
+        it('renames a file within the same directory', async () => {
+            const fs = await makeFs();
+            const file = await fs.createFile('/old.txt');
+            const encoder = new TextEncoder();
+            const decoder = new TextDecoder();
+            await file.write(encoder.encode('hello'));
+
+            await fs.rename('/old.txt', '/new.txt');
+
+            expect(await fs.readDirectory('/')).toContain('new.txt');
+            expect(await fs.readDirectory('/')).not.toContain('old.txt');
+            expect(decoder.decode(await fs.readFile('/new.txt'))).toBe('hello');
+        });
+
+        it('moves a file across directories', async () => {
+            const fs = await makeFs();
+            await fs.createDirectory('/a', true);
+            await fs.createDirectory('/b', true);
+            const file = await fs.createFile('/a/note.txt');
+            const encoder = new TextEncoder();
+            const decoder = new TextDecoder();
+            await file.write(encoder.encode('moved'));
+
+            await fs.rename('/a/note.txt', '/b/note.txt');
+
+            expect(await fs.readDirectory('/a')).not.toContain('note.txt');
+            expect(await fs.readDirectory('/b')).toContain('note.txt');
+            expect(decoder.decode(await fs.readFile('/b/note.txt'))).toBe('moved');
+        });
+
+        it('throws KvError_FS_Exists when the destination already exists', async () => {
+            const fs = await makeFs();
+            await fs.createFile('/a.txt');
+            await fs.createFile('/b.txt');
+
+            await expect(fs.rename('/a.txt', '/b.txt')).rejects.toBeInstanceOf(KvError_FS_Exists);
         });
     });
 });

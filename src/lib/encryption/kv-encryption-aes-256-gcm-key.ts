@@ -23,7 +23,7 @@ import { KvEncryption } from './helpers/kv-encryption';
  * sees only opaque (nonce ‖ ciphertext ‖ tag) tuples and cannot mutate
  * any of them undetected.
  */
-export class KvEncryptionAES256GCMKey extends KvEncryption {
+export class KvEncryptionAES256GCMKey implements KvEncryption {
     public static readonly KEY_LENGTH_BYTES = 32;
     /** Standard 96-bit nonce length for GCM. */
     public static readonly NONCE_LENGTH_BYTES = 12;
@@ -36,7 +36,6 @@ export class KvEncryptionAES256GCMKey extends KvEncryption {
     private readonly key: Uint8Array;
 
     constructor(key: Uint8Array) {
-        super();
         if (key.length !== KvEncryptionAES256GCMKey.KEY_LENGTH_BYTES) {
             throw new KvError_Enc_Key(`Encryption key must be ${KvEncryptionAES256GCMKey.KEY_LENGTH_BYTES * 8} bits (${KvEncryptionAES256GCMKey.KEY_LENGTH_BYTES} bytes). Received ${key.length} bytes.`);
         }

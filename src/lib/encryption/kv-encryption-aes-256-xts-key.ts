@@ -31,7 +31,7 @@ import { KvEncryption } from './helpers/kv-encryption';
  * `Uint8Array`. The two halves must differ (the IEEE P1619 standard
  * requires this).
  */
-export class KvEncryptionAES256XTSKey extends KvEncryption {
+export class KvEncryptionAES256XTSKey implements KvEncryption {
     /** XTS combines two AES-256 keys; together that's 512 bits. */
     public static readonly KEY_LENGTH_BYTES = 64;
 
@@ -45,7 +45,6 @@ export class KvEncryptionAES256XTSKey extends KvEncryption {
     private readonly tweakKey: Uint8Array;
 
     constructor(key: Uint8Array) {
-        super();
         if (key.length !== KvEncryptionAES256XTSKey.KEY_LENGTH_BYTES) {
             throw new KvError_Enc_Key(`Encryption key must be ${KvEncryptionAES256XTSKey.KEY_LENGTH_BYTES * 8} bits (${KvEncryptionAES256XTSKey.KEY_LENGTH_BYTES} bytes). Received ${key.length} bytes.`);
         }

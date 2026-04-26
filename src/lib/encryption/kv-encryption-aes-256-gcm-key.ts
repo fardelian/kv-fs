@@ -79,6 +79,7 @@ export class KvEncryptionAES256GCMKey extends KvEncryption {
         return aad;
     }
 
+    /** Generate a fresh random 256-bit key suitable for the constructor. */
     public static generateRandomKey(): Uint8Array {
         return randomBytes(KvEncryptionAES256GCMKey.KEY_LENGTH_BYTES);
     }

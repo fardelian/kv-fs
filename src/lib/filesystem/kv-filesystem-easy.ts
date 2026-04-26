@@ -2,6 +2,13 @@ import { KvINodeFile, KvINodeDirectory } from '../inode';
 import { KvFilesystem } from './kv-filesystem';
 import { KvError_FS_Exists } from '../utils';
 
+/**
+ * Path-walking facade over `KvFilesystem`. Callers pass POSIX-style
+ * paths (`/home/user/note.txt`); this class splits them, walks the
+ * directory tree, and forwards to the lower-level `KvFilesystem`.
+ *
+ * The separator defaults to `/` and is configurable.
+ */
 export class KvFilesystemEasy {
     private readonly filesystem: KvFilesystem;
     private readonly separator;

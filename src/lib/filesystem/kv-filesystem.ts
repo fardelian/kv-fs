@@ -3,6 +3,11 @@ import { INodeId, KvINodeDirectory, KvINodeFile } from '../inode';
 import { KvBlockDevice } from '../block-devices';
 import { Init } from '../utils';
 
+/**
+ * Core filesystem: walks the superblock + inode tree on top of any
+ * `KvBlockDevice`. Operations take an explicit parent directory; for
+ * the path-walking facade see `KvFilesystemEasy`.
+ */
 export class KvFilesystem {
     private blockDevice: KvBlockDevice;
     private superBlock!: SuperBlock;
@@ -13,6 +18,7 @@ export class KvFilesystem {
         this.superBlockId = superBlockId;
     }
 
+    /** Load the superblock; called automatically by every decorated method. */
     async init(): Promise<void> {
         this.superBlock = new SuperBlock(this.blockDevice, this.superBlockId);
         await this.superBlock.init();
@@ -20,6 +26,7 @@ export class KvFilesystem {
 
     // File operations
 
+    /** Create an empty file under `directory`. */
     @Init
     public async createFile(name: string, directory: KvINodeDirectory): Promise<KvINodeFile> {
         const file = await KvINodeFile.createEmptyFile(this.blockDevice);
@@ -27,14 +34,14 @@ export class KvFilesystem {
         return file;
     }
 
+    /** Open an existing file by name under `directory`. Throws `KvError_FS_NotFound` if missing. */
     @Init
     public async getKvFile(name: string, directory: KvINodeDirectory): Promise<KvINodeFile> {
-        // getEntry throws KvError_FS_NotFound when the entry is missing,
-        // which is exactly what we want callers to see.
         const iNodeId = await directory.getEntry(name);
         return new KvINodeFile(this.blockDevice, iNodeId);
     }
 
+    /** Remove a file from `directory` and free all of its data blocks. */
     @Init
     public async unlink(name: string, directory: KvINodeDirectory): Promise<void> {
         const iNodeId = await directory.getEntry(name);
@@ -46,6 +53,7 @@ export class KvFilesystem {
 
     // Directory operations
 
+    /** Create an empty subdirectory under `directory`. */
     @Init
     public async createDirectory(name: string, directory: KvINodeDirectory): Promise<KvINodeDirectory> {
         const id = await this.blockDevice.allocateBlock();
@@ -55,12 +63,14 @@ export class KvFilesystem {
         return newDirectory;
     }
 
+    /** Open an existing subdirectory by name under `parentDirectory`. */
     @Init
     public async getDirectory(name: string, parentDirectory: KvINodeDirectory): Promise<KvINodeDirectory> {
         const iNodeId = await parentDirectory.getEntry(name);
         return new KvINodeDirectory(this.blockDevice, iNodeId);
     }
 
+    /** Open the filesystem root directory (whose ID is recorded in the superblock). */
     @Init
     public async getRootDirectory(): Promise<KvINodeDirectory> {
         return new KvINodeDirectory(this.blockDevice, this.superBlock.rootDirectoryId);

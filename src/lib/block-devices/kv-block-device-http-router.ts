@@ -56,6 +56,7 @@ export class KvBlockDeviceHttpRouter {
         this.blockDevice = blockDevice;
     }
 
+    /** Register every block-device endpoint on the given Express router. */
     public mount(router: Router): void {
         router
             // GET /blocks — return self-describing device metadata so the

@@ -59,6 +59,11 @@ export class SuperBlock {
         this.superBlockId = superBlockId;
     }
 
+    /**
+     * Read the superblock from the device. Throws
+     * `KvError_FS_FormatVersion` if the on-disk version doesn't match
+     * the build's `FORMAT_VERSION`.
+     */
     async init(): Promise<void> {
         const buffer = await this.blockDevice.readBlock(this.superBlockId);
         const view = dataView(buffer);
@@ -74,6 +79,7 @@ export class SuperBlock {
         this.rootDirectoryId = view.getUint32(SuperBlock.OFFSET_ROOT_DIRECTORY_ID);
     }
 
+    /** Write a fresh superblock at `id` and return a `SuperBlock` wrapper around it. */
     public static async createSuperBlock(
         id: INodeId,
         blockDevice: KvBlockDevice,

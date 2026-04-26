@@ -1,3 +1,4 @@
+/** Base class for every kv-fs error; subclasses set `name` from `new.target`. */
 abstract class KvError extends Error {
     constructor(message: string) {
         super(message);

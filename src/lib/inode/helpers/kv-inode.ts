@@ -40,7 +40,7 @@ export abstract class INode<DataType> {
         this.id = id;
     }
 
-    /** The on-disk discriminator subclasses commit to. */
+    /** Type discriminator stored at offset 0 (KV_INODE_KIND_DIRECTORY / KV_INODE_KIND_FILE). */
     public abstract get kind(): number;
 
     async init(): Promise<void> {

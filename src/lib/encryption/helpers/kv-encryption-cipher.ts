@@ -6,6 +6,15 @@ import { CipherGCMTypes } from 'node:crypto';
 /** AES block size in bytes — used as the PKCS#7 padding overhead. */
 const AES_BLOCK_BYTES = 16;
 
+/**
+ * Shared base for symmetric AES schemes that store an IV alongside the
+ * ciphertext (CBC, GCM, ...). Subclasses pick the algorithm, key length,
+ * and IV length; this class handles encrypt/decrypt and key validation.
+ *
+ * The key is supplied via `setKey` (or in a subclass constructor) rather
+ * than the constructor here, so password-derived classes can run the
+ * KDF before installing the key.
+ */
 export abstract class KvEncryptionCipher extends KvEncryption {
     protected readonly algorithm: CipherGCMTypes;
     protected readonly keyLengthBytes: number;
@@ -37,6 +46,7 @@ export abstract class KvEncryptionCipher extends KvEncryption {
         return this.ivLengthBytes + AES_BLOCK_BYTES;
     }
 
+    /** Install the symmetric key. Length must match `keyLengthBytes`. */
     public setKey(key: Uint8Array) {
         if (key.length !== this.keyLengthBytes) {
             throw new KvError_Enc_Key(`Encryption key must be ${this.keyLengthBytes * 8} bits (${this.keyLengthBytes} bytes). Received ${key.length} bytes.`);
@@ -51,42 +61,33 @@ export abstract class KvEncryptionCipher extends KvEncryption {
         }
     }
 
-    // CBC + PKCS#7 doesn't need a per-block tweak — the random IV is what
-    // makes each ciphertext unique. `_blockId` is part of the unified
-    // `KvEncryption` API so tweakable schemes (XTS) and untweakable ones
-    // share a single shape.
+    /**
+     * Encrypt `data` with a fresh random IV and prepend the IV to the
+     * ciphertext. `blockId` is unused — the IV is what makes each
+     * ciphertext unique; the parameter exists to match the
+     * `KvEncryption` contract (tweakable schemes like XTS need it).
+     */
     @Init
     public async encrypt(_blockId: number, data: Uint8Array): Promise<Uint8Array> {
-        const iv = randomBytes(this.ivLengthBytes); // Initialization vector
+        const iv = randomBytes(this.ivLengthBytes);
         const cipher = createCipheriv(this.algorithm, this.key, iv);
-
         const encryptedData = concatBytes([cipher.update(data), cipher.final()]);
-
-        // The IV is needed for decryption, so we include it with the encrypted data
         return concatBytes([iv, encryptedData]);
     }
 
+    /** Decrypt the IV-prepended ciphertext produced by `encrypt`. */
     @Init
     public async decrypt(_blockId: number, data: Uint8Array): Promise<Uint8Array> {
-        // The IV was prepended to the encrypted data. Use `subarray` so the
-        // slices respect `data.byteOffset` — `data.buffer` would point at the
-        // underlying ArrayBuffer's start, which is wrong if `data` is a view
-        // into a larger buffer.
+        // `subarray` (not `data.buffer`) respects byteOffset when `data`
+        // is a view into a larger ArrayBuffer.
         const iv = data.subarray(0, this.ivLengthBytes);
         const encryptedData = data.subarray(this.ivLengthBytes);
 
-        const decipher = createDecipheriv(
-            this.algorithm,
-            this.key,
-            iv,
-        );
-
-        return concatBytes([
-            decipher.update(encryptedData),
-            decipher.final(),
-        ]);
+        const decipher = createDecipheriv(this.algorithm, this.key, iv);
+        return concatBytes([decipher.update(encryptedData), decipher.final()]);
     }
 
+    /** Generate a fresh random key of the configured length. */
     public generateRandomKey(): Uint8Array {
         return randomBytes(this.keyLengthBytes);
     }

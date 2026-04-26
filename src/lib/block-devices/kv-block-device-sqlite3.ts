@@ -3,6 +3,11 @@ import { INodeId } from '../inode';
 import { AsyncDatabase } from 'promised-sqlite3';
 import { Init, KvError_BD_NotFound } from '../utils';
 
+/**
+ * `KvBlockDevice` backed by a SQLite3 table. One row per block, keyed
+ * by integer ID. Stores blocks verbatim (no zero-padding); call sites
+ * relying on full-block reads should pad before write.
+ */
 export class KvBlockDeviceSqlite3 extends KvBlockDevice {
     /**
      * SQLite cannot parameterize identifiers, so `tableName` is interpolated
@@ -36,6 +41,7 @@ export class KvBlockDeviceSqlite3 extends KvBlockDevice {
         this.tableName = tableName;
     }
 
+    /** Create the blocks table if it doesn't exist. Idempotent. */
     async init(): Promise<void> {
         await this.database.run(
             `CREATE TABLE IF NOT EXISTS ${this.tableName} (id INTEGER PRIMARY KEY, data BLOB)`,

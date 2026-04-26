@@ -146,7 +146,7 @@ export class KvFuseHandlers {
         }
     }
 
-    /** `readdir(path)` — list directory entries (not including `.` and `..`). */
+    /** List entries in a directory; does not include `.` or `..`. */
     public async readdir(path: string): Promise<string[]> {
         try {
             return await this.fs.readDirectory(path);
@@ -158,7 +158,7 @@ export class KvFuseHandlers {
         }
     }
 
-    /** `open(path)` — return a file handle for subsequent reads/writes. */
+    /** Open a file and return a handle (small monotonic integer) for subsequent I/O. */
     public async open(path: string): Promise<number> {
         try {
             const file = await this.fs.getKvFile(path);
@@ -211,7 +211,7 @@ export class KvFuseHandlers {
         this.openFiles.delete(fh);
     }
 
-    /** `unlink(path)` — delete a regular file. */
+    /** Delete a regular file. */
     public async unlink(path: string): Promise<void> {
         try {
             await this.fs.unlink(path);
@@ -223,7 +223,7 @@ export class KvFuseHandlers {
         }
     }
 
-    /** `mkdir(path)` — create a directory. */
+    /** Create a directory. */
     public async mkdir(path: string): Promise<void> {
         try {
             await this.fs.createDirectory(path);
@@ -263,6 +263,7 @@ export class KvFuseHandlers {
         throw new KvFuseError('ENOSYS', `rename of "${from}" → "${to}" is not implemented in KvFilesystem yet.`);
     }
 
+    /** Resolve `fh` to its open-file record; throws `EBADF` if unknown. */
     private requireFh(fh: number): { path: string; file: KvINodeFile } {
         const handle = this.openFiles.get(fh);
         if (!handle) {

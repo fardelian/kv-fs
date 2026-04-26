@@ -20,6 +20,7 @@ import { INodeId } from '../inode';
  * every hit but still pays the AEAD verify cost). Either way works.
  */
 export class KvCachedBlockDevice extends KvBlockDevice {
+    /** Default LRU cache capacity, in blocks. */
     public static readonly DEFAULT_MAX_BLOCKS = 256;
 
     private readonly inner: KvBlockDevice;
@@ -39,6 +40,7 @@ export class KvCachedBlockDevice extends KvBlockDevice {
         this.maxBlocks = maxBlocks;
     }
 
+    /** Number of blocks currently held in the cache. */
     public getCacheSize(): number {
         return this.cache.size;
     }

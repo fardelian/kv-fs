@@ -4,7 +4,11 @@ import { KvBlockDevice } from './helpers/kv-block-device';
 import { INodeId } from '../inode';
 import { KvError_BD_Overflow } from '../utils';
 
-/** KvBlockDevice which uses the local file system. One file per block. */
+/**
+ * `KvBlockDevice` backed by the local filesystem: one file per block,
+ * named `{blockId}.txt` under the configured base path. Short writes
+ * are zero-padded to `blockSize`.
+ */
 export class KvBlockDeviceFs extends KvBlockDevice {
     private readonly localFsBasePath: string;
 

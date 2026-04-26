@@ -14,9 +14,13 @@ export interface KvAuthVerifier {
     iterations: number;
 }
 
+/** Length of the derived auth and encryption keys (256 bits each). */
 export const KV_PASSWORD_AUTH_KEY_LENGTH_BYTES = 32;
+/** Length of the per-user random salt. */
 export const KV_PASSWORD_AUTH_SALT_LENGTH_BYTES = 16;
+/** Length of the random challenge nonce sent on login. */
 export const KV_PASSWORD_AUTH_CHALLENGE_LENGTH_BYTES = 32;
+/** Default PBKDF2 iteration count; raise if you can spare CPU at login time. */
 export const KV_PASSWORD_AUTH_DEFAULT_ITERATIONS = 100_000;
 
 /**

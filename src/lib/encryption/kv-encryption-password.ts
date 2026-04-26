@@ -1,6 +1,11 @@
 import { KvEncryptionAES256CBCKey } from './kv-encryption-aes-256-cbc-key';
 import { pbkdf2Sync } from 'crypto';
 
+/**
+ * `KvEncryptionAES256CBCKey` keyed by a password instead of a raw key.
+ * Derives the AES-256 key from `(password, salt, iterations)` via
+ * PBKDF2-SHA512.
+ */
 export class KvEncryptionPassword extends KvEncryptionAES256CBCKey {
     /**
      * @param password    The user-supplied password to derive the AES key from.

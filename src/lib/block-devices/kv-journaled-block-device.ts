@@ -94,6 +94,7 @@ export class KvJournaledBlockDevice extends KvBlockDevice {
         await this.flushJournal();
     }
 
+    /** Snapshot of currently-known journal records (read-only inspection). */
     public getRecords(): readonly KvJournalRecord[] {
         return this.records;
     }

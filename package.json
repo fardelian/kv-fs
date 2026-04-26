@@ -16,6 +16,7 @@
     "start-memory": "bun src/examples/example-memory.ts",
     "start-sqlite": "bun src/examples/example-sqlite.ts",
     "start-sqlite-permanent": "bun src/examples/example-sqlite-permanent.ts",
+    "start-sqlite-permanent-fuse": "bun src/examples/example-sqlite-permanent-fuse.ts",
     "start-http-server": "bun src/examples/example-http-server.ts",
     "start-http-client": "bun src/examples/example-http-client.ts"
   },

@@ -1,6 +1,7 @@
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvBlockDeviceHttpClient, KvEncryptedBlockDevice } from '../lib/block-devices';
 import { KvEncryptionPassword } from '../lib/encryption';
+import { KvError_FS_Exists } from '../lib/utils';
 
 const PORT = 3000;
 
@@ -12,7 +13,7 @@ const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 /** Total number of `[N/STEP_COUNT]` log lines this script emits. Bump when adding a step. */
-const STEP_COUNT = 6;
+const STEP_COUNT = 7;
 
 async function run() {
     const t0 = new Date().getTime();
@@ -65,7 +66,22 @@ async function run() {
     const rootDir = await easyFileSystem.getDirectory('/');
     console.log('  rootDir:', await rootDir.read());
 
-    console.log(`[6/${STEP_COUNT}] re-fetching server metadata to confirm allocations:`);
+    // Per-run timestamp drop: /YYYY-MM-DD/HH-MM-SS.txt with the full ISO
+    // string as content. Same pattern as example-sqlite-permanent.
+    const isoNow = new Date().toISOString();
+    const dayDir = `/${isoNow.slice(0, 10)}`;
+    const timePath = `${dayDir}/${isoNow.slice(11, 19).replace(/:/g, '-')}.txt`;
+    console.log(`[6/${STEP_COUNT}] writing run timestamp to ${timePath}...`);
+    try {
+        await easyFileSystem.createDirectory(dayDir);
+    } catch (err) {
+        if (!(err instanceof KvError_FS_Exists)) throw err;
+    }
+    const timeFile = await easyFileSystem.createFile(timePath);
+    await timeFile.write(new TextEncoder().encode(isoNow));
+    console.log(`  wrote ${timePath} = "${isoNow}"`);
+
+    console.log(`[7/${STEP_COUNT}] re-fetching server metadata to confirm allocations:`);
     const metaAfter = await fetch(`http://localhost:${PORT}/blocks`);
     console.log('  GET /blocks:', await metaAfter.json());
 

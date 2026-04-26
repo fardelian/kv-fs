@@ -12,24 +12,26 @@
  *      FUSE-shaped adapter; `getattr` / `readdir` / `read` / `write`
  *      use the same callback shapes a real fuse-native binding would
  *      invoke. To actually mount this volume on a host filesystem,
- *      see example-fuse-mount.ts and `npm install fuse-native`.
- *   4. Write a fresh file with random bytes via `KvFilesystemSimple`.
+ *      see example-sqlite-permanent-fuse-manual.ts.
+ *   4. Drop a per-run timestamp file at /YYYY-MM-DD/HH-MM-SS.txt so
+ *      re-runs accumulate visible state inside the kv-fs.
  *   5. List the kv-fs root through the FUSE handlers — the same
  *      `(name, size, ctime)` tuples a real `fs.readdirSync` /
  *      `fs.statSync` against a mounted FUSE volume would produce.
+ *      Recurses one level into date directories so the timestamp
+ *      files show up in the listing.
  *   6. Use Node's built-in `fs/promises` to read what the *host* sees
- *      — a single `data.sqlite3` file
- *      holding every kv-fs block. Side-by-side with the FUSE listing
- *      this makes the abstraction concrete: many "files" inside one
- *      backing file outside.
+ *      — a single `data.sqlite3` file holding every kv-fs block.
+ *      Side-by-side with the FUSE listing this makes the abstraction
+ *      concrete: many "files" inside one backing file outside.
  */
 import { stat } from 'fs/promises';
 import { mkdirSync } from 'fs';
-import { randomBytes } from 'crypto';
 import { AsyncDatabase } from 'promised-sqlite3';
 import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvFuseHandlers } from '../lib/fuse';
+import { KvError_FS_Exists } from '../lib/utils';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -51,7 +53,6 @@ async function run(): Promise<void> {
     console.log(`[1/${STEP_COUNT}] opening SQLite database...`);
     const database = await AsyncDatabase.open(DB_PATH);
     try {
-        // Mount the kv-fs on top of the configured SQLite table.
         const blockDevice = new KvBlockDeviceSqlite3(
             BLOCK_SIZE,
             BLOCK_SIZE * TOTAL_BLOCKS,
@@ -59,10 +60,13 @@ async function run(): Promise<void> {
             TABLE_NAME,
         );
 
-        // Format if missing — `getHighestBlockId() === -1` is the
-        // canonical "fresh device" signal across every backend.
+        // Same gate as example-sqlite-permanent: a freshly-formatted
+        // volume leaves the superblock + root directory blocks
+        // (highest >= 1), so `< 2` covers both "no blocks at all" and
+        // "stale partial init".
         const highestBefore = await blockDevice.getHighestBlockId();
-        if (highestBefore === -1) {
+        const needsFormat = highestBefore < 2;
+        if (needsFormat) {
             console.log(`[2/${STEP_COUNT}] table "${TABLE_NAME}" is empty — formatting a fresh kv-fs volume.`);
             await KvFilesystem.format(blockDevice, TOTAL_INODES);
         } else {
@@ -74,33 +78,46 @@ async function run(): Promise<void> {
         const easyFs = new KvFilesystemSimple(filesystem, '/');
         const handlers = new KvFuseHandlers(easyFs, BLOCK_SIZE);
 
-        // A timestamped name lets re-runs accumulate so the listing in
-        // the next step grows visibly with each invocation.
-        const fileName = `random-${Date.now()}.bin`;
-        const filePath = `/${fileName}`;
-        const payload = new Uint8Array(randomBytes(2048));
-        const file = await easyFs.createFile(filePath);
-        await file.write(payload);
-        console.log(`[4/${STEP_COUNT}] wrote ${payload.length} random bytes → ${filePath}`);
+        // Per-run timestamp drop: /YYYY-MM-DD/HH-MM-SS.txt with the full
+        // ISO string as content. Same pattern as example-sqlite-permanent.
+        const isoNow = new Date().toISOString();
+        const dayDir = `/${isoNow.slice(0, 10)}`;
+        const timePath = `${dayDir}/${isoNow.slice(11, 19).replace(/:/g, '-')}.txt`;
+        console.log(`[4/${STEP_COUNT}] writing run timestamp to ${timePath}...`);
+        try {
+            await easyFs.createDirectory(dayDir);
+        } catch (err) {
+            if (!(err instanceof KvError_FS_Exists)) throw err;
+        }
+        const timeFile = await easyFs.createFile(timePath);
+        await timeFile.write(new TextEncoder().encode(isoNow));
+        console.log(`  wrote ${timePath} = "${isoNow}"`);
 
         // Same call shape (`readdir` + `getattr`) that a real fuse-native
         // mount would dispatch when you run `fs.readdir` / `fs.stat`
-        // against the mount point.
+        // against the mount point. Recurses one level into date dirs
+        // so the timestamp files are visible.
         console.log(`[5/${STEP_COUNT}] kv-fs / contents (via FUSE readdir + getattr):`);
-        const names = await handlers.readdir('/');
-        const fmtRow = (name: string, size: number, ctime: Date) =>
+        const fmtRow = (name: string, size: number, ctime: Date): string =>
             `  ${name.padEnd(40)}  size=${String(size).padStart(8)}  ctime=${ctime.toISOString()}`;
+        const names = await handlers.readdir('/');
         for (const name of names) {
             const attr = await handlers.getattr(`/${name}`);
             console.log(fmtRow(name, attr.size, attr.ctime));
+            if (/^\d{4}-\d{2}-\d{2}$/.test(name)) {
+                const children = await handlers.readdir(`/${name}`);
+                for (const child of children) {
+                    const childAttr = await handlers.getattr(`/${name}/${child}`);
+                    console.log(fmtRow(`  ${name}/${child}`, childAttr.size, childAttr.ctime));
+                }
+            }
         }
 
         // Node's `fs/promises` view of the same volume — except the
         // host sees the entire kv-fs as a single `.sqlite3` file
         // because FUSE isn't actually mounted at the OS level here.
-        // The contrast is the point: the `easyFs.createFile` call
-        // above wrote a file inside the kv-fs, but on disk it's just
-        // a few more rows in one SQLite database file.
+        // The contrast is the point: every kv-fs file we just listed
+        // is just more rows in one SQLite database file on disk.
         console.log(`[6/${STEP_COUNT}] host view (via Node fs/promises):`);
         const dbStat = await stat(DB_PATH);
         console.log(fmtRow(DB_PATH.replace(`${LOCAL_FS_PATH}/`, ''), dbStat.size, dbStat.birthtime));

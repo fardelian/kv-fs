@@ -36,6 +36,7 @@ import { AsyncDatabase } from 'promised-sqlite3';
 import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvFuseError, KvFuseHandlers } from '../lib/fuse';
+import { KvError_FS_Exists } from '../lib/utils';
 
 // The minimal type stub for `@cocalc/fuse-native` lives in the
 // sibling `cocalc-fuse-native.d.ts` so this file stays a plain module.
@@ -46,7 +47,7 @@ const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 /** Total number of `[N/STEP_COUNT]` log lines this script emits. Bump when adding a step. */
-const STEP_COUNT = 6;
+const STEP_COUNT = 7;
 
 const TABLE_NAME = 'blocks_fuse_manual';
 // Resolve `data/` relative to this source file via import.meta.url —
@@ -160,6 +161,21 @@ async function run(): Promise<void> {
         console.log('      seeded README.txt and example/hello.txt.');
     }
 
+    // Per-run timestamp drop: /YYYY-MM-DD/HH-MM-SS.txt with the full ISO
+    // string as content. Same pattern as example-sqlite-permanent.
+    const isoNow = new Date().toISOString();
+    const dayDir = `/${isoNow.slice(0, 10)}`;
+    const timePath = `${dayDir}/${isoNow.slice(11, 19).replace(/:/g, '-')}.txt`;
+    console.log(`[4/${STEP_COUNT}] writing run timestamp to ${timePath}...`);
+    try {
+        await easyFs.createDirectory(dayDir);
+    } catch (err) {
+        if (!(err instanceof KvError_FS_Exists)) throw err;
+    }
+    const timeFile = await easyFs.createFile(timePath);
+    await timeFile.write(new TextEncoder().encode(isoNow));
+    console.log(`  wrote ${timePath} = "${isoNow}"`);
+
     // ---- 2. Wire the handlers into fuse-native's vtable ----
     const ops: Record<string, unknown> = {
         readdir: (path: string, cb: (errno: number, names?: string[]) => void) => {
@@ -270,16 +286,16 @@ async function run(): Promise<void> {
     };
 
     // ---- 3. Mount ----
-    console.log(`[4/${STEP_COUNT}] constructing Fuse(${MOUNT_POINT}, ...)...`);
+    console.log(`[5/${STEP_COUNT}] constructing Fuse(${MOUNT_POINT}, ...)...`);
     const fuse = new Fuse(MOUNT_POINT, ops, { force: true, mkdir: true });
-    console.log(`[5/${STEP_COUNT}] calling fuse.mount() — this is where macFUSE / FUSE-T gets engaged...`);
+    console.log(`[6/${STEP_COUNT}] calling fuse.mount() — this is where macFUSE / FUSE-T gets engaged...`);
     await new Promise<void>((resolve, reject) => {
         fuse.mount((err: Error | null) => {
             if (err) reject(err);
             else resolve();
         });
     });
-    console.log(`[6/${STEP_COUNT}] mounted at ${MOUNT_POINT}.`);
+    console.log(`[7/${STEP_COUNT}] mounted at ${MOUNT_POINT}.`);
     console.log('device:', {
         blockSize: blockDevice.getBlockSize(),
         capacityBytes: blockDevice.getCapacityBytes(),

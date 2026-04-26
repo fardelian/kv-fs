@@ -1,5 +1,6 @@
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
+import { KvError_FS_Exists } from '../lib/utils';
 import { mkdirSync } from 'fs';
 import { AsyncDatabase } from 'promised-sqlite3';
 
@@ -10,7 +11,7 @@ const TOTAL_NODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 /** Total number of `[N/STEP_COUNT]` log lines this script emits. Bump when adding a step. */
-const STEP_COUNT = 5;
+const STEP_COUNT = 6;
 
 const LOCAL_FS_PATH = `${import.meta.dirname}/../../data`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
@@ -78,6 +79,24 @@ async function run() {
 
     const highestBlockIdAfter = await sqliteBlockDevice.getHighestBlockId();
     console.log(`  highestBlockId after: ${highestBlockIdAfter}`);
+
+    // Per-run timestamp drop: /YYYY-MM-DD/HH-MM-SS.txt with the full ISO
+    // string as content. The directory exists after the first run of the
+    // day; subsequent runs reuse it (createDirectory throws
+    // KvError_FS_Exists when the entry is already there — swallow that
+    // one and let any other error propagate).
+    const isoNow = new Date().toISOString();
+    const dayDir = `/${isoNow.slice(0, 10)}`;
+    const timePath = `${dayDir}/${isoNow.slice(11, 19).replace(/:/g, '-')}.txt`;
+    console.log(`[6/${STEP_COUNT}] writing run timestamp to ${timePath}...`);
+    try {
+        await easyFileSystem.createDirectory(dayDir);
+    } catch (err) {
+        if (!(err instanceof KvError_FS_Exists)) throw err;
+    }
+    const timeFile = await easyFileSystem.createFile(timePath);
+    await timeFile.write(new TextEncoder().encode(isoNow));
+    console.log(`  wrote ${timePath} = "${isoNow}"`);
 
     console.log('time:', new Date().getTime() - t0);
 }

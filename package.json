@@ -11,7 +11,7 @@
     "lint:fix": "eslint . --fix",
     "test": "bun test",
     "test:acceptance": "bun test ./src/acceptance",
-    "test:coverage": "bun test --coverage",
+    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=.coverage && node scripts/lcov-to-html.mjs",
     "start-local-fs": "bun src/examples/example-local-fs.ts",
     "start-memory": "bun src/examples/example-memory.ts",
     "start-sqlite": "bun src/examples/example-sqlite.ts",

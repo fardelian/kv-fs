@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvINodeDirectory } from './kv-inode-directory';
 import { KvError_FS_NotFound, KvError_INode_NameOverflow } from '../utils';

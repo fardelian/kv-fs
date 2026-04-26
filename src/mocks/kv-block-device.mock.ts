@@ -1,4 +1,4 @@
-import { jest } from 'bun:test';
+import { jest } from '@jest/globals';
 import { KvBlockDevice } from '../lib/block-devices';
 import { INodeId } from '../lib/inode';
 

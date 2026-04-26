@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvINodeFile } from './kv-inode-file';
@@ -391,6 +391,70 @@ describe('KvINodeFile', () => {
             expect(last.length).toBe(10);
             expect(Array.from(last)).toEqual(Array.from(pattern(total).subarray(BLOCK_SIZE * 3, total)));
             expect(file.getPos()).toBe(total);
+        });
+    });
+
+    describe('readPartial / writePartial — argument validation', () => {
+        it('readPartial rejects a negative start', async () => {
+            const { file } = await makeFile();
+            await expect(file.readPartial(-1, 4)).rejects.toThrow(/start must be non-negative/);
+        });
+
+        it('readPartial rejects a negative length', async () => {
+            const { file } = await makeFile();
+            await expect(file.readPartial(0, -1)).rejects.toThrow(/length must be non-negative/);
+        });
+
+        it('writePartial rejects a negative offset', async () => {
+            const { file } = await makeFile();
+            await expect(file.writePartial(-1, new Uint8Array([1])))
+                .rejects.toThrow(/offset must be non-negative/);
+        });
+
+        it('writePartial is a no-op when data is empty', async () => {
+            const { file } = await makeFile();
+            await file.writePartial(0, new Uint8Array(0));
+            expect(file.size).toBe(0);
+        });
+    });
+
+    describe('readPartial / writePartial — block-aligned full-block paths', () => {
+        it('readPartial of an exact block-aligned slice uses the full-block read path', async () => {
+            const { file } = await makeFile();
+            const total = BLOCK_SIZE * 3;
+            await file.write(pattern(total));
+
+            // Aligned: start=BLOCK_SIZE, length=BLOCK_SIZE → exactly the
+            // middle data block. Hits the `sliceLen === blockSize` branch
+            // that calls readBlock (not readBlockPartial).
+            const middle = await file.readPartial(BLOCK_SIZE, BLOCK_SIZE);
+
+            expect(middle.length).toBe(BLOCK_SIZE);
+            expect(Array.from(middle)).toEqual(
+                Array.from(pattern(total).subarray(BLOCK_SIZE, BLOCK_SIZE * 2)),
+            );
+        });
+
+        it('writePartial of a block-aligned full block uses the full-block write path', async () => {
+            const { file } = await makeFile();
+            await file.write(pattern(BLOCK_SIZE * 3));
+
+            // Aligned: offset=BLOCK_SIZE, data.length=BLOCK_SIZE → exactly
+            // overwrites the middle data block. Hits the `offsetInBlock === 0
+            // && writeLen === blockSize` branch that calls writeBlock (not
+            // writeBlockPartial).
+            const replacement = pattern(BLOCK_SIZE, 0xa5);
+            await file.writePartial(BLOCK_SIZE, replacement);
+
+            const middle = await file.readPartial(BLOCK_SIZE, BLOCK_SIZE);
+            expect(Array.from(middle)).toEqual(Array.from(replacement));
+            // Surrounding blocks unchanged.
+            const head = await file.readPartial(0, BLOCK_SIZE);
+            const tail = await file.readPartial(BLOCK_SIZE * 2, BLOCK_SIZE);
+            expect(Array.from(head)).toEqual(Array.from(pattern(BLOCK_SIZE)));
+            expect(Array.from(tail)).toEqual(
+                Array.from(pattern(BLOCK_SIZE * 3).subarray(BLOCK_SIZE * 2)),
+            );
         });
     });
 

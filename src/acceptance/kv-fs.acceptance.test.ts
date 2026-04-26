@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { KvBlockDeviceMemory } from '../lib/block-devices';
 import { KvFilesystem } from '../lib/filesystem';
 import { KvError_FS_Exists, KvError_FS_NotEmpty, KvError_FS_NotFound } from '../lib/utils';

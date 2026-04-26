@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import { KvBlockDeviceMemory } from './kv-block-device-memory';
 import { KvJournaledBlockDevice } from './kv-journaled-block-device';
 import { KvError_BD_Overflow } from '../utils';
@@ -66,6 +66,43 @@ describe('KvJournaledBlockDevice (CAS / WAL scaffold)', () => {
             await reopened.writeBlock(99, new Uint8Array(BLOCK_SIZE));
 
             expect(reopened.getRecords().map((r) => r.seq)).toEqual([1, 2, 3, 4]);
+        });
+
+        it('open() on a fresh device (no journal block yet) starts empty', async () => {
+            // Skip formatJournal — the journal block does not exist on disk.
+            const fresh = new KvBlockDeviceMemory(BLOCK_SIZE, CAPACITY);
+            const wrapper = new KvJournaledBlockDevice(fresh, JOURNAL_BLOCK_ID);
+
+            const uncommitted = await wrapper.open();
+
+            expect(uncommitted).toEqual([]);
+            expect(wrapper.getRecords()).toEqual([]);
+        });
+
+        it('parseJournal recognises a free record after reopen (free op flag round-trips)', async () => {
+            await journaled.writeBlock(2, new Uint8Array(BLOCK_SIZE));
+            await journaled.freeBlock(2);
+
+            const reopened = new KvJournaledBlockDevice(inner, JOURNAL_BLOCK_ID);
+            await reopened.open();
+
+            const records = reopened.getRecords();
+            expect(records.map((r) => r.op)).toEqual(['write', 'free']);
+        });
+
+        it('parseJournal treats a zero-filled journal block as virgin (nextSeq → 1)', async () => {
+            // Write an all-zero buffer at the journal block ID, bypassing
+            // formatJournal so the header stays zero. parseJournal should
+            // then interpret nextSeq=0 as "virgin" and fold it up to 1.
+            const fresh = new KvBlockDeviceMemory(BLOCK_SIZE, CAPACITY);
+            await fresh.writeBlock(JOURNAL_BLOCK_ID, new Uint8Array(BLOCK_SIZE));
+
+            const wrapper = new KvJournaledBlockDevice(fresh, JOURNAL_BLOCK_ID);
+            await wrapper.open();
+            await wrapper.writeBlock(5, new Uint8Array(BLOCK_SIZE));
+
+            // First seq should be 1 (not 0), proving the virgin fix kicked in.
+            expect(wrapper.getRecords()[0].seq).toBe(1);
         });
     });
 

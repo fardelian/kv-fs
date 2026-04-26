@@ -1,30 +1,20 @@
-import { describe, it, expect, jest } from 'bun:test';
-import { KvBlockDeviceSqlite3, KvSqliteDriver } from './kv-block-device-sqlite3';
+import { describe, it, expect, jest } from '@jest/globals';
+import { KvBlockDeviceSqlite3 } from './kv-block-device-sqlite3';
 import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils';
+import type { AsyncDatabase } from 'promised-sqlite3';
 
 const BLOCK_SIZE = 4096;
 const CAPACITY_BYTES = BLOCK_SIZE * 64;
 const TABLE_NAME = 'blocks';
 
 /**
- * Fake {@link KvSqliteDriver}. The block device only ever talks to
- * `run` / `get` — `close` is here for completeness and to satisfy
- * the interface, never invoked from the device itself.
- *
- * (`database` is the historical name still used by the assertions
- * below — it's just the driver mock.)
- *
- * `get` is widened to `<T>(...) => Promise<T | undefined>` via a cast
- * so a single `jest.fn` can stand in for the generic signature on the
- * interface. `mockResolvedValueOnce(row)` works against any concrete
- * row type — the cast just lets TypeScript see the generic shape.
+ * Fake `AsyncDatabase`. Only `run` and `get` are exercised by
+ * `KvBlockDeviceSqlite3`, so we expose them as `jest.fn`s and don't
+ * bother implementing the rest of the AsyncDatabase surface.
  */
-class FakeDatabase implements KvSqliteDriver {
-    public run = jest.fn<(sql: string, ...params: unknown[]) => Promise<void>>();
-    public get = jest.fn<(sql: string, ...params: unknown[]) => Promise<unknown>>() as
-        unknown as KvSqliteDriver['get'] & jest.Mock<(sql: string, ...params: unknown[]) => Promise<unknown>>;
-
-    public close = jest.fn<() => Promise<void>>();
+class FakeDatabase {
+    public run = jest.fn<(sql: string, ...params: unknown[]) => Promise<unknown>>();
+    public get = jest.fn<(sql: string, ...params: unknown[]) => Promise<unknown>>();
 }
 
 function makeDevice(database: FakeDatabase = new FakeDatabase()): {
@@ -34,7 +24,7 @@ function makeDevice(database: FakeDatabase = new FakeDatabase()): {
     const device = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
         CAPACITY_BYTES,
-        database,
+        database as unknown as AsyncDatabase,
         TABLE_NAME,
     );
     return { database, device };
@@ -45,7 +35,7 @@ describe('KvBlockDeviceSqlite3', () => {
         const make = (tableName: string) => () => new KvBlockDeviceSqlite3(
             BLOCK_SIZE,
             CAPACITY_BYTES,
-            new FakeDatabase(),
+            new FakeDatabase() as unknown as AsyncDatabase,
             tableName,
         );
 

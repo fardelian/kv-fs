@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, jest, mock } from 'bun:test';
+import { describe, it, expect, beforeAll, beforeEach, jest } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import * as path from 'path';
 
@@ -17,7 +17,7 @@ interface FakeFd {
 }
 const mockOpen = jest.fn<(p: string, flags: string) => Promise<FakeFd>>();
 
-mock.module('fs/promises', () => ({
+jest.unstable_mockModule('fs/promises', () => ({
     readFile: mockReadFile,
     writeFile: mockWriteFile,
     unlink: mockUnlink,
@@ -50,10 +50,6 @@ describe('KvBlockDeviceFs', () => {
     let device: InstanceType<typeof KvBlockDeviceFs>;
 
     beforeEach(() => {
-        // Reset call history on each mock individually rather than via
-        // jest.resetAllMocks(); bun:test's jest-compat namespace doesn't
-        // expose the *AllMocks helpers and the few mocks here are easy
-        // enough to enumerate.
         mockReadFile.mockReset();
         mockWriteFile.mockReset();
         mockUnlink.mockReset();

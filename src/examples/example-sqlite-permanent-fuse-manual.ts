@@ -33,7 +33,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AsyncDatabase } from 'promised-sqlite3';
-import { KvBlockDeviceSqlite3, wrapAsyncDatabase } from '../lib/block-devices';
+import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
 import { KvFuseError, KvFuseHandlers } from '../lib/fuse';
 
@@ -112,13 +112,12 @@ async function run(): Promise<void> {
     }
 
     // ---- 1. SQLite-backed kv-fs on a fresh table ----
-    console.log('[2/6] opening SQLite database via promised-sqlite3 (Node path; bun:sqlite is Bun-only)...');
+    console.log('[2/6] opening SQLite database...');
     const database = await AsyncDatabase.open(DB_PATH);
-    const driver = wrapAsyncDatabase(database);
     const blockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
         BLOCK_SIZE * TOTAL_BLOCKS,
-        driver,
+        database,
         TABLE_NAME,
     );
 
@@ -281,7 +280,7 @@ async function run(): Promise<void> {
             filesystem.flush().then(
                 async () => {
                     try {
-                        await driver.close();
+                        await database.close();
                     } catch (err) {
                         console.error('database close error:', err);
                     }

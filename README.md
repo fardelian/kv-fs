@@ -167,9 +167,7 @@ There are two FUSE examples; they target the same `KvFuseHandlers` adapter from 
 
 We use [`@cocalc/fuse-native`](https://www.npmjs.com/package/@cocalc/fuse-native) rather than the original [`fuse-native`](https://www.npmjs.com/package/fuse-native): the original has been unmaintained since 2021 and its native binary segfaults inside `mount()` on recent macOS releases (macFUSE 4+ / Apple Silicon). The cocalc fork keeps the same API and rebuilds against modern macFUSE / FUSE-T / libfuse.
 
-`@cocalc/fuse-native` is declared as an `optionalDependency` and as a `trustedDependency`, so `bun install` will compile it (and run its postinstall to fetch / build the native binary) on systems where the OS-level FUSE library is present, and silently skip it everywhere else. There's no `bun add` step.
-
-This particular example runs under [`tsx`](https://www.npmjs.com/package/tsx) (Node + TypeScript loader) rather than bun. As of bun 1.3, Bun's NAPI loader segfaults when the FUSE binding is imported — Node loads it cleanly. Every other script in the project still runs under bun; only this one is special.
+`@cocalc/fuse-native` is declared as an `optionalDependency`, so `npm install` will compile it (and run its postinstall to fetch / build the native binary) on systems where the OS-level FUSE library is present, and silently skip it everywhere else.
 
 To run the manual mount example:
 
@@ -179,16 +177,14 @@ To run the manual mount example:
 2. **Install the project** (compiles `fuse-native`):
 
    ```bash
-   bun install
+   npm install
    ```
 
-   If you'd run `bun install` previously without the OS library, bun won't retry the optional dep on its own. Force it with:
+   If you'd run `npm install` previously without the OS library, npm won't retry the optional dep on its own. Force it with:
 
    ```bash
-   bun install --force
+   npm install --force
    ```
-
-   You may see `Blocked N postinstall. Run \`bun pm untrusted\` for details.` — bun blocks postinstall scripts from packages it doesn't recognise. `fuse-native` is in the `trustedDependencies` allow-list in [`package.json`](package.json), so this should clear itself; if it doesn't, run `bun pm trust fuse-native` once and then `bun install --force`.
 3. **Run the example**:
 
    ```bash

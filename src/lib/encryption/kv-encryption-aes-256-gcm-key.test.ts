@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { KvEncryptionAES256GCMKey } from './kv-encryption-aes-256-gcm-key';
 import { KvError_Enc_Key } from '../utils';

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { KvBlockDeviceHttpClient } from './kv-block-device-http-client';
 import { KvError_BD_Overflow } from '../utils';
 

@@ -77,22 +77,10 @@ export default tseslint.config(
         },
     },
 
-    // The eslint config itself isn't covered by tsconfig either.
+    // Project config files (eslint, jest) live outside the tsconfig
+    // include glob, so type-aware rules can't be applied to them.
     {
-        files: ['eslint.config.mjs'],
+        files: ['eslint.config.mjs', 'jest.config.js'],
         ...tseslint.configs.disableTypeChecked,
-    },
-
-    // Test files: bun-types' matcher signatures aren't always typed as
-    // Promises even when they're awaitable, and `mock.module(...)` is a
-    // fire-and-forget call that returns undefined. Drop the rules that
-    // would otherwise flag the standard test patterns.
-    {
-        files: ['**/*.test.ts', 'src/mocks/**/*.ts'],
-        rules: {
-            '@typescript-eslint/await-thenable': 'off',
-            '@typescript-eslint/no-confusing-void-expression': 'off',
-            '@typescript-eslint/no-floating-promises': 'off',
-        },
     },
 );

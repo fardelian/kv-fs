@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { KvBlockDeviceMemory } from '../../block-devices';
 import { KvINodeDirectory, KvINodeFile } from '../';
 import { KvError_INode_KindMismatch } from '../../utils';

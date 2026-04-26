@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, jest } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { MockBlockDevice } from '../../../mocks/kv-block-device.mock';
 
@@ -254,6 +254,15 @@ describe('KvBlockDevice (base)', () => {
             device.readBlock.mockRejectedValue(new Error('disk gone'));
 
             await expect(device.readBlocksWithDecoys([1])).rejects.toThrow(/Read of block 1 failed/);
+        });
+
+        it('throws when a batch read succeeds without returning data', async () => {
+            // A custom backend could legally return { ok: true } without
+            // a data field — defensive guard at the helper level.
+            const device = new MockBlockDevice(4096);
+            jest.spyOn(device, 'batch').mockResolvedValueOnce([{ ok: true }]);
+
+            await expect(device.readBlocksWithDecoys([5])).rejects.toThrow(/Read of block 5 returned no data/);
         });
     });
 

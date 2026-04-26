@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from 'bun:test';
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { KvEncryptedBlockDevice } from './kv-encrypted-block-device';
 import { MockBlockDevice } from '../../mocks/kv-block-device.mock';
 import { KvError_BD_Overflow } from '../utils';
@@ -102,6 +102,69 @@ describe('KvEncryptedBlockDevice', () => {
             await expect(wrapped.writeBlock(0, oversize)).rejects.toBeInstanceOf(KvError_BD_Overflow);
             expect(enc.encrypt).not.toHaveBeenCalled();
             expect(inner.writeBlock).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('writeBlockPartial', () => {
+        it('throws KvError_BD_Overflow when offset + data exceeds the exposed block size', async () => {
+            const inner = new MockBlockDevice(INNER_BLOCK_SIZE, INNER_CAPACITY_BYTES);
+            const enc = new XorEncryption();
+            const wrapped = new KvEncryptedBlockDevice(inner, enc);
+
+            const data = new Uint8Array(8);
+            await expect(wrapped.writeBlockPartial(0, wrapped.getBlockSize() - 4, data))
+                .rejects.toBeInstanceOf(KvError_BD_Overflow);
+            expect(inner.readBlock).not.toHaveBeenCalled();
+            expect(inner.writeBlock).not.toHaveBeenCalled();
+        });
+
+        it('is a no-op when data is empty (no inner I/O)', async () => {
+            const inner = new MockBlockDevice(INNER_BLOCK_SIZE, INNER_CAPACITY_BYTES);
+            const wrapped = new KvEncryptedBlockDevice(inner, new XorEncryption());
+
+            await wrapped.writeBlockPartial(0, 0, new Uint8Array(0));
+
+            expect(inner.readBlock).not.toHaveBeenCalled();
+            expect(inner.writeBlock).not.toHaveBeenCalled();
+        });
+
+        it('round-trips through readBlock + writeBlock (RMW on the whole block)', async () => {
+            const inner = new MockBlockDevice(INNER_BLOCK_SIZE, INNER_CAPACITY_BYTES);
+            const wrapped = new KvEncryptedBlockDevice(inner, new XorEncryption());
+            const ciphertext = new Uint8Array(INNER_BLOCK_SIZE).fill(0xff);
+            inner.readBlock.mockResolvedValueOnce(ciphertext);
+            inner.writeBlock.mockResolvedValueOnce(undefined);
+
+            await wrapped.writeBlockPartial(2, 1, new Uint8Array([0xaa]));
+
+            expect(inner.readBlock).toHaveBeenCalledWith(2);
+            expect(inner.writeBlock).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('readBlockPartial', () => {
+        it('returns an empty buffer when end <= start (no inner read)', async () => {
+            const inner = new MockBlockDevice(INNER_BLOCK_SIZE, INNER_CAPACITY_BYTES);
+            const wrapped = new KvEncryptedBlockDevice(inner, new XorEncryption());
+
+            const slice = await wrapped.readBlockPartial(0, 5, 5);
+
+            expect(slice.length).toBe(0);
+            expect(inner.readBlock).not.toHaveBeenCalled();
+        });
+
+        it('decrypts the whole block then slices [start, end)', async () => {
+            const inner = new MockBlockDevice(INNER_BLOCK_SIZE, INNER_CAPACITY_BYTES);
+            const wrapped = new KvEncryptedBlockDevice(inner, new XorEncryption());
+            const ciphertext = new Uint8Array(INNER_BLOCK_SIZE).fill(0xff);
+            ciphertext[2] = 0xfd; // → plaintext byte 0x02
+            ciphertext[3] = 0xfc; // → plaintext byte 0x03
+            inner.readBlock.mockResolvedValueOnce(ciphertext);
+
+            const slice = await wrapped.readBlockPartial(7, 2, 4);
+
+            expect(inner.readBlock).toHaveBeenCalledWith(7);
+            expect(Array.from(slice)).toEqual([0x02, 0x03]);
         });
     });
 

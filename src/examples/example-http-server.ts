@@ -2,12 +2,11 @@ import {
     KvBlockDeviceHttpRouter,
     KvEncryptedBlockDevice,
     KvBlockDeviceSqlite3,
-    wrapBunSqliteDatabase,
 } from '../lib/block-devices';
 import { KvEncryptionRot13 } from '../lib/encryption';
 import express from 'express';
 import { mkdirSync } from 'fs';
-import { Database } from 'bun:sqlite';
+import { AsyncDatabase } from 'promised-sqlite3';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -21,13 +20,12 @@ async function run() {
 
     // Create backend block device (encrypted, using sqlite)
 
-    const database = new Database(`${LOCAL_FS_PATH}/data.sqlite3`);
-    const driver = wrapBunSqliteDatabase(database);
+    const database = await AsyncDatabase.open(`${LOCAL_FS_PATH}/data.sqlite3`);
 
     const sqliteBlockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
         BLOCK_SIZE * TOTAL_BLOCKS,
-        driver,
+        database,
         'blocks',
     );
 

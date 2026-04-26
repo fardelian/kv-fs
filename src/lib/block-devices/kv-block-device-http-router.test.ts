@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceHttpRouter } from './kv-block-device-http-router';
 import { MockBlockDevice } from '../../mocks/kv-block-device.mock';
@@ -344,6 +344,22 @@ describe('KvBlockDeviceHttpRouter', () => {
             expect(blockDevice.writeBlock).not.toHaveBeenCalled();
         });
 
+        it('accepts a plain Uint8Array body (not a Buffer)', async () => {
+            // Buffer.isBuffer is false on a plain Uint8Array, but the
+            // Uint8Array branch of bodyAsBytes should still pass it through.
+            const { blockDevice, fakeRouter } = makeRouter();
+            blockDevice.writeBlock.mockResolvedValueOnce(undefined);
+
+            const res = await invoke(fakeRouter, 'PUT', '/blocks/:blockId', {
+                params: { blockId: '4' },
+                body: new Uint8Array([0xa, 0xb, 0xc]),
+            });
+
+            expect(res.statusCode).toBe(204);
+            expect(blockDevice.writeBlock).toHaveBeenCalledTimes(1);
+            expect(Array.from(blockDevice.writeBlock.mock.calls[0][1])).toEqual([0xa, 0xb, 0xc]);
+        });
+
         it('returns 400 with an error message for an invalid blockId', async () => {
             const { blockDevice, fakeRouter } = makeRouter();
 
@@ -416,6 +432,17 @@ describe('KvBlockDeviceHttpRouter', () => {
             const res = await invoke(fakeRouter, 'POST', '/blocks/batch', { body: { ops: 'not-array' } });
 
             expect(res.statusCode).toBe(400);
+        });
+
+        it('returns 400 when an op is missing a string `op` field', async () => {
+            const { fakeRouter } = makeRouter();
+
+            const res = await invoke(fakeRouter, 'POST', '/blocks/batch', {
+                body: { ops: [{ op: 5, blockId: 0 }] },
+            });
+
+            expect(res.statusCode).toBe(400);
+            expect(res.body).toEqual({ error: 'Each op needs a string op.' });
         });
 
         it('returns 400 when an op is missing a numeric blockId', async () => {

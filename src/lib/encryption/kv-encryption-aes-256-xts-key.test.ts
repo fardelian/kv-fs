@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import { faker } from '@faker-js/faker';
 import { KvEncryptionAES256XTSKey } from './kv-encryption-aes-256-xts-key';
 import { KvError_Enc_Key } from '../utils';
@@ -45,6 +45,12 @@ describe('KvEncryptionAES256XTSKey', () => {
         it('accepts a 64-byte key', () => {
             expect(() => new KvEncryptionAES256XTSKey(fixedKey())).not.toThrow();
         });
+
+        it('rejects a key whose two halves are identical (IEEE P1619 forbids it)', () => {
+            // Same byte across the whole 64 B → dataKey == tweakKey.
+            const collision = new Uint8Array(KEY_BYTES).fill(0x42);
+            expect(() => new KvEncryptionAES256XTSKey(collision)).toThrow(KvError_Enc_Key);
+        });
     });
 
     describe('overhead', () => {
@@ -64,6 +70,17 @@ describe('KvEncryptionAES256XTSKey', () => {
         it('rejects non-aligned input lengths', async () => {
             await expect(xts.encrypt(blockId, pattern(17))).rejects.toBeInstanceOf(KvError_Enc_Key);
             await expect(xts.encrypt(blockId, pattern(15))).rejects.toBeInstanceOf(KvError_Enc_Key);
+        });
+
+        it('rejects non-aligned input lengths on decrypt as well', async () => {
+            await expect(xts.decrypt(blockId, pattern(17))).rejects.toBeInstanceOf(KvError_Enc_Key);
+            await expect(xts.decrypt(blockId, pattern(15))).rejects.toBeInstanceOf(KvError_Enc_Key);
+        });
+
+        it('encrypt and decrypt return empty buffers unchanged (length-zero short-circuit)', async () => {
+            const empty = new Uint8Array(0);
+            expect((await xts.encrypt(blockId, empty)).length).toBe(0);
+            expect((await xts.decrypt(blockId, empty)).length).toBe(0);
         });
     });
 

@@ -25,7 +25,7 @@
     // "moduleDetection": "auto",                        /* Control what method is used to detect module-format JS files. */
 
     /* Modules */
-    "module": "es2022",                                  /* es2022 supports top-level `await` (used in src/test-globals.ts). The actual emit format isn't relevant for `tsc --noEmit`; ts-jest and bun both handle the runtime side. */
+    "module": "es2022",                                  /* es2022 keeps top-level `await` available where we use it; the actual emit format isn't relevant for `tsc --noEmit` and ts-jest handles the runtime transform. */
     // "rootDir": "./",                                  /* Specify the root folder within your source files. */
     // "moduleResolution": "node",                       /* Specify how TypeScript looks up a file from a given module specifier. */
     // "baseUrl": "./",                                  /* Specify the base directory to resolve non-relative module names. */
@@ -72,7 +72,6 @@
     // "isolatedModules": true,                          /* Ensure that each file can be safely transpiled without relying on other imports. */
     // "allowSyntheticDefaultImports": true,             /* Allow 'import x from y' when a module doesn't have a default export. */
     "esModuleInterop": true,                             /* Emit additional JavaScript to ease support for importing CommonJS modules. This enables 'allowSyntheticDefaultImports' for type compatibility. */
-    "types": ["bun"],                                    /* Pull in @types/bun (which transitively references bun-types) for `bun:test` module ambient types. Without this, `node_modules/@types/*` is auto-included by tsgo but bun:test isn't surfaced. */
     // "preserveSymlinks": true,                         /* Disable resolving symlinks to their realpath. This correlates to the same flag in node. */
     "forceConsistentCasingInFileNames": true,            /* Ensure that casing is correct in imports. */
 

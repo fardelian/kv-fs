@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, jest } from '@jest/globals';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '../filesystem';
+import { KvError_FS_NotFound } from '../utils';
 import { KvFuseError, KvFuseHandlers } from './kv-fuse-handlers';
 
 const BLOCK_SIZE = 4096;
@@ -22,6 +23,18 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 describe('KvFuseHandlers', () => {
+    describe('constructor', () => {
+        it('uses 4096 as the default blockSize when none is given', async () => {
+            const device = new KvBlockDeviceMemory(BLOCK_SIZE, BLOCK_SIZE * TOTAL_BLOCKS);
+            await KvFilesystem.format(device, TOTAL_INODES);
+            const fs = new KvFilesystemSimple(new KvFilesystem(device, SUPER_BLOCK_ID), '/');
+            const handlers = new KvFuseHandlers(fs);
+
+            const stat = await handlers.getattr('/');
+            expect(stat.blksize).toBe(4096);
+        });
+    });
+
     describe('getattr', () => {
         it('reports a directory mode for the root', async () => {
             const { handlers } = await makeHandlers();
@@ -243,6 +256,11 @@ describe('KvFuseHandlers', () => {
             expect(err.message).toBe('gone');
             expect(err.name).toBe('KvFuseError');
         });
+
+        it('KvFuseError defaults its message to the errno code when none is given', () => {
+            const err = new KvFuseError('EBADF');
+            expect(err.message).toBe('EBADF');
+        });
     });
 
     describe('access / utimens / chmod / chown', () => {
@@ -384,6 +402,264 @@ describe('KvFuseHandlers', () => {
             const { fs, handlers } = await makeHandlers();
             await handlers.mkdir('/sub', 0o700);
             expect(await fs.readDirectory('/')).toContain('sub');
+        });
+    });
+
+    describe('EIO fallback — unrecognised errors from the underlying filesystem map to EIO', () => {
+        // The handlers translate KvError_FS_NotFound / Exists / NotEmpty
+        // into the matching errno. Anything else falls through to a
+        // generic EIO. We exercise that fall-through by spying on the
+        // underlying fs methods and forcing them to throw a plain Error.
+        const unrelated = new Error('disk on fire');
+
+        it('getattr (file branch) returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+            jest.spyOn(fs, 'getKvFile').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.getattr('/a.txt'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'disk on fire' });
+        });
+
+        it('getattr (directory branch) returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'getDirectory').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.getattr('/'))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('readdir returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'readDirectory').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.readdir('/'))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('readdir EIO falls back to String(err) when err is not an Error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'readDirectory').mockRejectedValueOnce('plain string');
+
+            await expect(handlers.readdir('/'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain string' });
+        });
+
+        it('open returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/o.txt');
+            jest.spyOn(fs, 'getKvFile').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.open('/o.txt'))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('create returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'createFile').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.create('/c.txt'))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('unlink returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/u.txt');
+            jest.spyOn(fs, 'removeFile').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.unlink('/u.txt'))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('mkdir returns ENOENT when the parent does not exist', async () => {
+            const { handlers } = await makeHandlers();
+
+            await expect(handlers.mkdir('/missing/sub'))
+                .rejects.toMatchObject({ code: 'ENOENT' });
+        });
+
+        it('mkdir returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'createDirectory').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.mkdir('/m'))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('truncate returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/t.txt');
+            jest.spyOn(fs, 'getKvFile').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.truncate('/t.txt', 5))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('rmdir returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createDirectory('/d');
+            jest.spyOn(fs, 'removeDirectory').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.rmdir('/d'))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('rename returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/from.txt');
+            jest.spyOn(fs, 'rename').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.rename('/from.txt', '/to.txt'))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('utimens (file branch) returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/uf.txt');
+            jest.spyOn(fs, 'getKvFile').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.utimens('/uf.txt', new Date(0), new Date()))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('utimens (directory branch) returns EIO on an unrelated error', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'getDirectory').mockRejectedValueOnce(unrelated);
+
+            await expect(handlers.utimens('/', new Date(0), new Date()))
+                .rejects.toMatchObject({ code: 'EIO' });
+        });
+
+        it('truncate on a missing path returns ENOENT', async () => {
+            const { handlers } = await makeHandlers();
+
+            await expect(handlers.truncate('/missing.txt', 0))
+                .rejects.toMatchObject({ code: 'ENOENT' });
+        });
+    });
+
+    describe('EIO message stringification — non-Error rejections route through String(err)', () => {
+        // Every EIO fallback shape is `err instanceof Error ? err.message : String(err)`.
+        // The Error branch is covered above; this group covers the String(err) branch
+        // for each handler that has its own EIO catch.
+        const stringErr: unknown = 'plain non-error';
+
+        it('getattr (file branch) stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/a.txt');
+            jest.spyOn(fs, 'getKvFile').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.getattr('/a.txt'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('getattr (directory branch) stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'getDirectory').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.getattr('/'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('open stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/o.txt');
+            jest.spyOn(fs, 'getKvFile').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.open('/o.txt'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('create stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'createFile').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.create('/c.txt'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('unlink stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/u.txt');
+            jest.spyOn(fs, 'removeFile').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.unlink('/u.txt'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('mkdir stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'createDirectory').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.mkdir('/m'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('truncate stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/t.txt');
+            jest.spyOn(fs, 'getKvFile').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.truncate('/t.txt', 5))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('rmdir stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createDirectory('/d');
+            jest.spyOn(fs, 'removeDirectory').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.rmdir('/d'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('rename stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/r.txt');
+            jest.spyOn(fs, 'rename').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.rename('/r.txt', '/s.txt'))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('utimens (file branch) stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            await fs.createFile('/uf.txt');
+            jest.spyOn(fs, 'getKvFile').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.utimens('/uf.txt', new Date(0), new Date()))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+
+        it('utimens (directory branch) stringifies non-Error rejections', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'getDirectory').mockRejectedValueOnce(stringErr);
+
+            await expect(handlers.utimens('/', new Date(0), new Date()))
+                .rejects.toMatchObject({ code: 'EIO', message: 'plain non-error' });
+        });
+    });
+
+    describe('directory-branch ENOENT mapping (rare paths exposed via spies)', () => {
+        // The "directory branch" is hard to reach naturally without first
+        // tripping the file-branch's own NotFound. We spy on the
+        // underlying fs so the dir-branch lookup throws NotFound directly.
+        const notFound = new KvError_FS_NotFound('synthetic missing');
+
+        it('getattr (directory branch) maps NotFound to ENOENT', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'getDirectory').mockRejectedValueOnce(notFound);
+
+            await expect(handlers.getattr('/'))
+                .rejects.toMatchObject({ code: 'ENOENT' });
+        });
+
+        it('utimens (directory branch) maps NotFound to ENOENT', async () => {
+            const { fs, handlers } = await makeHandlers();
+            jest.spyOn(fs, 'getDirectory').mockRejectedValueOnce(notFound);
+
+            await expect(handlers.utimens('/', new Date(0), new Date()))
+                .rejects.toMatchObject({ code: 'ENOENT' });
         });
     });
 });

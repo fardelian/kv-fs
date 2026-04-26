@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import {
+    KV_PASSWORD_AUTH_DEFAULT_ITERATIONS,
     KV_PASSWORD_AUTH_KEY_LENGTH_BYTES,
     kvPasswordAuthDeriveAuthKey,
     kvPasswordAuthDeriveEncryptionKey,
@@ -31,6 +32,12 @@ describe('KvPasswordAuth', () => {
             expect(a.verifier.authVerifierHex).not.toBe(b.verifier.authVerifierHex);
             expect(Array.from(a.encryptionKey)).not.toEqual(Array.from(b.encryptionKey));
         });
+
+        it('falls back to KV_PASSWORD_AUTH_DEFAULT_ITERATIONS when called without an iteration count', () => {
+            // Slow path on purpose — covers the default-parameter branch.
+            const { verifier } = kvPasswordAuthRegister(PASSWORD);
+            expect(verifier.iterations).toBe(KV_PASSWORD_AUTH_DEFAULT_ITERATIONS);
+        }, 30_000);
 
         it('domain-separates the auth key and the encryption key (they are different)', () => {
             const { verifier, encryptionKey } = kvPasswordAuthRegister(PASSWORD, ITERATIONS);

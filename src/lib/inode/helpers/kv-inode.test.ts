@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { KvBlockDeviceMemory } from '../../block-devices';
-import { KvINodeDirectory, KvINodeFile, KvError_INode_KindMismatch } from '../';
+import { KvINodeDirectory, KvINodeFile } from '../';
+import { KvError_INode_KindMismatch } from '../../utils';
 
 const BLOCK_SIZE = 4096;
 const CAPACITY = BLOCK_SIZE * 16;

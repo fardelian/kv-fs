@@ -1,5 +1,5 @@
 import { KvBlockDevice } from '../../block-devices';
-import { dataView } from '../../utils';
+import { dataView, KvError_INode_KindMismatch } from '../../utils';
 
 export type INodeId = number;
 
@@ -73,22 +73,4 @@ export abstract class INode<DataType> {
 export async function readInodeKind(blockDevice: KvBlockDevice, id: INodeId): Promise<number> {
     const buffer = await blockDevice.readBlock(id);
     return dataView(buffer).getUint8(INode.OFFSET_KIND);
-}
-
-/**
- * Thrown when an inode block's stored `kind` byte doesn't match the
- * subclass trying to read it (e.g. `KvINodeFile` opened over what is
- * actually a directory). The easy-FS layer treats this as a not-found
- * for the wrong-kind lookup.
- */
-export class KvError_INode_KindMismatch extends Error {
-    constructor(
-        public readonly blockId: INodeId,
-        public readonly expectedKind: number,
-        public readonly storedKind: number,
-    ) {
-        super(`Inode at block "${blockId}" has stored kind ${storedKind}, expected ${expectedKind}.`);
-        Object.setPrototypeOf(this, new.target.prototype);
-        this.name = new.target.name;
-    }
 }

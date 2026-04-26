@@ -5,6 +5,7 @@ import {
     KvError_BD_Overflow,
     KvError_BD_NotFound,
     KvError_INode_NameOverflow,
+    KvError_INode_KindMismatch,
     KvError_Enc_Key,
     KvError_FS_Exists,
     KvError_FS_NotFound,
@@ -46,5 +47,16 @@ describe('KvError', () => {
         expect(new KvError_Init_Recursion().message).toMatch(/cannot be decorated/);
         expect(new KvError_BD_Overflow(99, 32).message).toBe('Data size "99" bytes exceeds block size "32" bytes.');
         expect(new KvError_FS_FormatVersion(7, 4).message).toContain('"7"');
+    });
+
+    it('exposes inode-kind-mismatch metadata fields', () => {
+        const err = new KvError_INode_KindMismatch(7, 1, 0);
+
+        expect(err).toBeInstanceOf(KvError);
+        expect(err.name).toBe('KvError_INode_KindMismatch');
+        expect(err.blockId).toBe(7);
+        expect(err.expectedKind).toBe(1);
+        expect(err.storedKind).toBe(0);
+        expect(err.message).toBe('Inode at block "7" has stored kind 0, expected 1.');
     });
 });

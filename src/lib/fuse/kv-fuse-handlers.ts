@@ -1,6 +1,6 @@
 import { KvFilesystemSimple } from '../filesystem';
-import { KvError_INode_KindMismatch, KvINodeFile } from '../inode';
-import { KvError_FS_Exists, KvError_FS_NotEmpty, KvError_FS_NotFound } from '../utils';
+import { KvINodeFile } from '../inode';
+import { KvError_FS_Exists, KvError_FS_NotEmpty, KvError_FS_NotFound, KvError_INode_KindMismatch } from '../utils';
 
 /**
  * Subset of POSIX-ish file attributes that any FUSE binding's `getattr`

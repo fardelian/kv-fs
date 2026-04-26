@@ -88,21 +88,25 @@ function adaptAsync<R>(
 }
 
 async function run(): Promise<void> {
+    console.log('[1/6] loading fuse-native...');
     let Fuse: typeof import('fuse-native').default;
     try {
-        Fuse = (await import('fuse-native')).default;
-    } catch {
-        console.error('`fuse-native` did not load. It is an optionalDependency, so');
-        console.error('`bun install` will skip it silently when the OS-level FUSE');
-        console.error('library is missing. To fix it:');
+        const mod = await import('fuse-native');
+        Fuse = mod.default;
+        console.log(`      loaded; default export typeof = ${typeof Fuse}`);
+    } catch (err: unknown) {
+        console.error('`fuse-native` did not load:', err);
+        console.error('It is an optionalDependency, so `bun install` skips it silently');
+        console.error('when the OS-level FUSE library is missing. To fix it:');
         console.error('  - macOS: install macFUSE (https://osxfuse.github.io/) or FUSE-T (https://www.fuse-t.org/),');
-        console.error('           then re-run `bun install` to compile the binding.');
+        console.error('           then re-run `bun install --force` to recompile the binding.');
         console.error('  - Linux: install libfuse-dev (Debian/Ubuntu) or fuse3-devel (Fedora),');
-        console.error('           then re-run `bun install`.');
+        console.error('           then re-run `bun install --force`.');
         process.exit(1);
     }
 
     // ---- 1. SQLite-backed kv-fs on a fresh table ----
+    console.log('[2/6] opening SQLite database...');
     const database = await AsyncDatabase.open(DB_PATH);
     const blockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
@@ -114,10 +118,10 @@ async function run(): Promise<void> {
     // Format only when the table is empty.
     const highest = await blockDevice.getHighestBlockId();
     if (highest === -1) {
-        console.log(`Table "${TABLE_NAME}" is empty — formatting a fresh kv-fs volume.`);
+        console.log(`[3/6] table "${TABLE_NAME}" is empty — formatting a fresh kv-fs volume.`);
         await KvFilesystem.format(blockDevice, TOTAL_INODES);
     } else {
-        console.log(`Table "${TABLE_NAME}" already populated (highest block id = ${highest}); reusing the existing volume.`);
+        console.log(`[3/6] table "${TABLE_NAME}" already populated (highest block id = ${highest}); reusing the existing volume.`);
     }
 
     const filesystem = new KvFilesystem(blockDevice, SUPER_BLOCK_ID);
@@ -234,14 +238,16 @@ async function run(): Promise<void> {
     };
 
     // ---- 3. Mount ----
+    console.log(`[4/6] constructing Fuse(${MOUNT_POINT}, ...)...`);
     const fuse = new Fuse(MOUNT_POINT, ops, { force: true, mkdir: true });
+    console.log('[5/6] calling fuse.mount() — this is where macFUSE / FUSE-T gets engaged...');
     await new Promise<void>((resolve, reject) => {
         fuse.mount((err: Error | null) => {
             if (err) reject(err);
             else resolve();
         });
     });
-    console.log(`Mounted at ${MOUNT_POINT}.`);
+    console.log(`[6/6] mounted at ${MOUNT_POINT}.`);
     console.log('Spawning bash. The mount point is exported as $KVFS_MOUNT inside the shell.');
     console.log('Try:');
     console.log('  ls -al "$KVFS_MOUNT"');

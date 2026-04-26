@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach } from 'test-globals';
 import { KvBlockDeviceMemory } from './kv-block-device-memory';
 import { KvJournaledBlockDevice } from './kv-journaled-block-device';
 import { KvError_BD_Overflow } from '../utils';

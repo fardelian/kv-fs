@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect } from 'test-globals';
 import { KvBlockDeviceMemory } from '../block-devices';
 import { KvFilesystem, KvFilesystemEasy } from '.';
 import { KvError_FS_Exists, KvError_FS_NotFound } from '../utils';

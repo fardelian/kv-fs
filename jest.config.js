@@ -19,6 +19,9 @@ module.exports = {
     },
     moduleNameMapper: {
         '^(\\.{1,2}/.*)\\.js$': '$1',
+        // Match the `paths` entry in tsconfig.json so test files can
+        // `import { ... } from 'test-globals'` under both jest and bun.
+        '^test-globals$': '<rootDir>/src/test-globals.ts',
     },
     // Coverage is opt-in via `npm run test:coverage` (or `jest --coverage`).
     // The HTML report lands at .coverage/lcov-report/index.html; open that

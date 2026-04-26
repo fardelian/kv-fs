@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach } from 'test-globals';
 import { faker } from '@faker-js/faker';
 import { KvBlockDeviceMemory } from './kv-block-device-memory';
 import { KvError_BD_NotFound, KvError_BD_Overflow } from '../utils';

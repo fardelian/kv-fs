@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect } from 'test-globals';
 import { faker } from '@faker-js/faker';
 import { MockBlockDevice } from '../../../mocks/kv-block-device.mock';
 

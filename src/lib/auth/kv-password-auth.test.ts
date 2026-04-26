@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect } from 'test-globals';
 import {
     KV_PASSWORD_AUTH_KEY_LENGTH_BYTES,
     kvPasswordAuthDeriveAuthKey,

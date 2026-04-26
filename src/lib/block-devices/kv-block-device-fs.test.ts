@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeAll, beforeEach, jest } from 'test-globals';
 import { faker } from '@faker-js/faker';
 import * as path from 'path';
 
@@ -42,7 +42,15 @@ describe('KvBlockDeviceFs', () => {
     let device: InstanceType<typeof KvBlockDeviceFs>;
 
     beforeEach(() => {
-        jest.resetAllMocks();
+        // Reset call history on each mock individually rather than via
+        // jest.resetAllMocks(); bun:test's jest-compat namespace doesn't
+        // expose the *AllMocks helpers and the few mocks here are easy
+        // enough to enumerate.
+        mockReadFile.mockReset();
+        mockWriteFile.mockReset();
+        mockUnlink.mockReset();
+        mockAccess.mockReset();
+        mockReaddir.mockReset();
         device = new KvBlockDeviceFs(BLOCK_SIZE, CAPACITY_BYTES, BASE_PATH);
     });
 

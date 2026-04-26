@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach } from 'test-globals';
 import { faker } from '@faker-js/faker';
 import { KvEncryptionRot13 } from './kv-encryption-rot13';
 

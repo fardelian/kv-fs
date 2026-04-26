@@ -95,6 +95,8 @@ function adaptAsync<R>(
 }
 
 async function run(): Promise<void> {
+    const t0 = new Date().getTime();
+
     console.log(`[1/${STEP_COUNT}] loading @cocalc/fuse-native...`);
     let Fuse: typeof import('@cocalc/fuse-native').default;
     try {
@@ -278,6 +280,7 @@ async function run(): Promise<void> {
         });
     });
     console.log(`[6/${STEP_COUNT}] mounted at ${MOUNT_POINT}.`);
+    console.log('time:', new Date().getTime() - t0);
     console.log('Spawning zsh with cwd=$KVFS_MOUNT. Try:');
     console.log('  ls -al');
     console.log('  cat README.txt');

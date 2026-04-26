@@ -15,6 +15,8 @@ const SUPER_BLOCK_ID = 0;
 const STEP_COUNT = 6;
 
 async function run() {
+    const t0 = new Date().getTime();
+
     console.log(`[1/${STEP_COUNT}] connecting to remote block device at http://localhost:${PORT}...`);
     const httpClient = new KvBlockDeviceHttpClient(`http://localhost:${PORT}`);
 
@@ -66,6 +68,8 @@ async function run() {
     console.log(`[6/${STEP_COUNT}] re-fetching server metadata to confirm allocations:`);
     const metaAfter = await fetch(`http://localhost:${PORT}/blocks`);
     console.log('  GET /blocks:', await metaAfter.json());
+
+    console.log('time:', new Date().getTime() - t0);
 }
 
 run().catch((err: unknown) => {

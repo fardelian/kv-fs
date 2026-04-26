@@ -46,6 +46,8 @@ const DB_PATH = `${LOCAL_FS_PATH}/data.sqlite3`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run(): Promise<void> {
+    const t0 = new Date().getTime();
+
     console.log(`[1/${STEP_COUNT}] opening SQLite database...`);
     const database = await AsyncDatabase.open(DB_PATH);
     try {
@@ -105,6 +107,8 @@ async function run(): Promise<void> {
     } finally {
         await database.close();
     }
+
+    console.log('time:', new Date().getTime() - t0);
 }
 
 run().catch((err: unknown) => {

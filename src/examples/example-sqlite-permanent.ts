@@ -16,6 +16,8 @@ const LOCAL_FS_PATH = `${import.meta.dirname}/../../data`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {
+    const t0 = new Date().getTime();
+
     console.log(`[1/${STEP_COUNT}] opening SQLite database...`);
     const database = await AsyncDatabase.open(`${LOCAL_FS_PATH}/data.sqlite3`);
 
@@ -76,6 +78,8 @@ async function run() {
 
     const highestBlockIdAfter = await sqliteBlockDevice.getHighestBlockId();
     console.log(`  highestBlockId after: ${highestBlockIdAfter}`);
+
+    console.log('time:', new Date().getTime() - t0);
 }
 
 run().catch((err: unknown) => {

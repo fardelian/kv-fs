@@ -167,6 +167,8 @@ There are two FUSE examples; they target the same `KvFuseHandlers` adapter from 
 
 `fuse-native` is declared as an `optionalDependency` and as a `trustedDependency`, so `bun install` will compile it (and run its postinstall to fetch / build the native binary) on systems where the OS-level FUSE library is present, and silently skip it everywhere else. There's no `bun add` step.
 
+This particular example runs under [`tsx`](https://www.npmjs.com/package/tsx) (Node + TypeScript loader) rather than bun. As of bun 1.3, Bun's NAPI loader segfaults when `fuse-native` is imported — Node loads the same binding cleanly. Every other script in the project still runs under bun; only this one is special.
+
 To run the manual mount example:
 
 1. **Install the OS-level FUSE library** (one-time):

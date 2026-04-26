@@ -17,7 +17,7 @@
     "start-sqlite": "bun src/examples/example-sqlite.ts",
     "start-sqlite-permanent": "bun src/examples/example-sqlite-permanent.ts",
     "start-sqlite-permanent-fuse": "bun src/examples/example-sqlite-permanent-fuse-auto.ts",
-    "start-sqlite-permanent-fuse-manual": "bun src/examples/example-sqlite-permanent-fuse-manual.ts",
+    "start-sqlite-permanent-fuse-manual": "tsx src/examples/example-sqlite-permanent-fuse-manual.ts",
     "start-http-server": "bun src/examples/example-http-server.ts",
     "start-http-client": "bun src/examples/example-http-client.ts"
   },
@@ -30,6 +30,7 @@
     "@types/node": "25.6.0",
     "@typescript/native-preview": "7.0.0-dev.20260426.1",
     "eslint": "10.2.1",
+    "tsx": "4.20.6",
     "typescript": "6.0.3",
     "typescript-eslint": "8.59.0"
   },

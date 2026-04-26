@@ -23,7 +23,9 @@
  *      (Ctrl+C just refreshes its prompt).
  */
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'fs';
+import { mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { AsyncDatabase } from 'promised-sqlite3';
 import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
 import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
@@ -38,7 +40,12 @@ const TOTAL_INODES = 100;
 const SUPER_BLOCK_ID = 0;
 
 const TABLE_NAME = 'blocks_fuse_manual';
-const LOCAL_FS_PATH = `${__dirname}/../../data`;
+// Resolve `data/` relative to this source file via import.meta.url —
+// `__dirname` doesn't exist under tsx/Node ESM. (This example runs
+// under tsx instead of bun because Bun's NAPI loader currently
+// segfaults on fuse-native; see README "Mounting via FUSE".)
+const HERE = dirname(fileURLToPath(import.meta.url));
+const LOCAL_FS_PATH = resolve(HERE, '..', '..', 'data');
 const DB_PATH = `${LOCAL_FS_PATH}/data.sqlite3`;
 const MOUNT_POINT = process.env.KVFS_MOUNT ?? '/tmp/kvfs-manual';
 

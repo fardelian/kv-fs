@@ -37,6 +37,9 @@
     "express": "5.2.1",
     "promised-sqlite3": "2.1.0"
   },
+  "optionalDependencies": {
+    "fuse-native": "2.2.6"
+  },
   "overrides": {
     "sqlite3": "6.0.1"
   }

@@ -1,19 +1,28 @@
 /**
  * Example: persist a kv-fs into a SQLite table and **really** mount it
- * via FUSE so the host's normal fs syscalls (`ls`, `cat`, `echo >>`,
- * `cp`, `df`, `touch`, ...) work against it.
+ * via FUSE, then drop the user into a `bash` session whose `$KVFS_MOUNT`
+ * points at the mount. The host's normal fs syscalls (`ls`, `cat`,
+ * `echo >>`, `cp`, `df`, `touch`, ...) all flow through the kernel
+ * into our handlers.
  *
  * Unlike `example-sqlite-permanent-fuse-auto.ts` (which only walks the
- * FUSE handlers in-process), this one loads the optional native binding
- * `fuse-native` and mounts at a real OS mount point. SIGINT and SIGTERM
- * are trapped so an orderly Ctrl+C: unmount → `KvFilesystem.flush()` →
- * close the SQLite database → exit. (`flush()` is a stub at the
- * filesystem layer right now; the wire-up is here so a future buffered-
- * write impl gets called on shutdown for free.)
+ * FUSE handlers in-process), this one loads `fuse-native` and mounts
+ * at a real OS mount point. The native binding is declared as an
+ * `optionalDependency` in package.json — it will compile during
+ * `bun install` if the OS-level FUSE library is present (macFUSE /
+ * FUSE-T on macOS, libfuse on Linux) and silently skip otherwise.
  *
- * See the "How to test" comment at the bottom of the file for setup
- * and a quick smoke-test script.
+ * Lifecycle:
+ *   1. Open SQLite, format the volume on first run.
+ *   2. Mount via fuse-native at `$KVFS_MOUNT` (default `/tmp/kvfs-manual`).
+ *   3. Spawn `bash` with stdio inherited and `KVFS_MOUNT` exported.
+ *   4. When the shell exits — `exit` / Ctrl+D — run shutdown:
+ *      `fuse.unmount → KvFilesystem.flush() → database.close() → exit 0`.
+ *   5. SIGTERM from outside kills the shell, which funnels through the
+ *      same shutdown path. SIGINT inside the shell stays with bash
+ *      (Ctrl+C just refreshes its prompt).
  */
+import { spawn } from 'node:child_process';
 import { mkdirSync } from 'fs';
 import { AsyncDatabase } from 'promised-sqlite3';
 import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
@@ -76,9 +85,13 @@ async function run(): Promise<void> {
     try {
         Fuse = (await import('fuse-native')).default;
     } catch {
-        console.error('Could not load `fuse-native`. Install it before running this example:');
-        console.error('  bun add fuse-native');
-        console.error('On macOS you also need macFUSE or FUSE-T; on Linux, libfuse-dev.');
+        console.error('`fuse-native` did not load. It is an optionalDependency, so');
+        console.error('`bun install` will skip it silently when the OS-level FUSE');
+        console.error('library is missing. To fix it:');
+        console.error('  - macOS: install macFUSE (https://osxfuse.github.io/) or FUSE-T (https://www.fuse-t.org/),');
+        console.error('           then re-run `bun install` to compile the binding.');
+        console.error('  - Linux: install libfuse-dev (Debian/Ubuntu) or fuse3-devel (Fedora),');
+        console.error('           then re-run `bun install`.');
         process.exit(1);
     }
 
@@ -222,20 +235,21 @@ async function run(): Promise<void> {
         });
     });
     console.log(`Mounted at ${MOUNT_POINT}.`);
-    console.log('Try (in another terminal):');
-    console.log(`  ls -al ${MOUNT_POINT}`);
-    console.log(`  echo 'hello' > ${MOUNT_POINT}/greet.txt`);
-    console.log(`  cat ${MOUNT_POINT}/greet.txt`);
-    console.log(`  echo ' world' >> ${MOUNT_POINT}/greet.txt`);
-    console.log(`  df ${MOUNT_POINT}`);
-    console.log('Press Ctrl+C (or send SIGTERM) to unmount cleanly.');
+    console.log('Spawning bash. The mount point is exported as $KVFS_MOUNT inside the shell.');
+    console.log('Try:');
+    console.log('  ls -al "$KVFS_MOUNT"');
+    console.log('  echo "hello" > "$KVFS_MOUNT/greet.txt"');
+    console.log('  cat "$KVFS_MOUNT/greet.txt"');
+    console.log('  echo " world" >> "$KVFS_MOUNT/greet.txt"');
+    console.log('  df "$KVFS_MOUNT"');
+    console.log('Type `exit` (or Ctrl+D) to unmount and quit.');
 
-    // ---- 4. Trap SIGINT / SIGTERM and shut down cleanly ----
+    // ---- 4. Spawn `bash` and shut down cleanly when it exits ----
     let shuttingDown = false;
-    const shutdown = (signal: NodeJS.Signals): void => {
+    const shutdown = (reason: string): void => {
         if (shuttingDown) return;
         shuttingDown = true;
-        console.log(`\nReceived ${signal} — unmounting and flushing.`);
+        console.log(`Shutting down (${reason}); unmounting and flushing.`);
         // Order matters: unmount FIRST so the kernel stops sending FUSE
         // calls into our handlers, THEN flush filesystem state, THEN
         // close the database.
@@ -261,11 +275,28 @@ async function run(): Promise<void> {
         });
     };
 
-    process.on('SIGINT', () => {
-        shutdown('SIGINT');
+    const shell = spawn('bash', [], {
+        stdio: 'inherit',
+        env: { ...process.env, KVFS_MOUNT: MOUNT_POINT },
     });
+
+    shell.on('exit', (code, signal) => {
+        const reason = signal !== null ? `shell exited via ${signal}` : `shell exited with code ${code ?? 'null'}`;
+        shutdown(reason);
+    });
+
+    // Outside-the-shell SIGTERM (e.g. `kill <pid>`) tears down the
+    // shell, which then triggers the same shutdown path via shell.on('exit').
     process.on('SIGTERM', () => {
-        shutdown('SIGTERM');
+        if (!shell.killed) shell.kill('SIGTERM');
+        else shutdown('SIGTERM');
+    });
+    // Inside the shell, Ctrl+C is bash's to handle (it just refreshes
+    // the prompt). The terminal driver delivers SIGINT to both bash and
+    // us; ignoring it here keeps the shell session alive — the user
+    // ends the session with `exit` instead.
+    process.on('SIGINT', () => {
+        // intentional no-op while the shell owns the foreground tty.
     });
 }
 
@@ -277,54 +308,51 @@ run().catch((err: unknown) => {
 /*
  * ---- How to test ---------------------------------------------------
  *
- * 1) Install the native FUSE binding (it's not in package.json — only
- *    this example needs it):
+ * 1) Make sure the OS-level FUSE library is installed so `bun install`
+ *    can compile the `fuse-native` optionalDependency:
+ *      - macOS: macFUSE (https://osxfuse.github.io/) or FUSE-T
+ *        (https://www.fuse-t.org/). FUSE-T is the kext-free option
+ *        and is usually the easier setup on Apple Silicon.
+ *      - Linux: libfuse-dev (Debian/Ubuntu) or fuse3-devel (Fedora).
+ *        The kernel module ships with most distros.
+ *    Then `bun install` (re-run if you'd already installed without
+ *    the OS library — bun will skip optionalDependencies that fail
+ *    to compile and won't retry unless you force it).
  *
- *        bun add fuse-native
- *
- *    macOS prerequisite: install macFUSE (https://osxfuse.github.io/)
- *      or FUSE-T (https://www.fuse-t.org/). FUSE-T is the kext-free
- *      option and is usually the easier setup on Apple Silicon.
- *
- *    Linux prerequisite: libfuse-dev (Debian/Ubuntu) or fuse3-devel
- *      (Fedora). The kernel module is preinstalled on most distros.
- *
- * 2) Create / clear the mount point if you've used it before:
- *
- *        mkdir -p /tmp/kvfs-manual
- *        # If a previous run was killed: `umount /tmp/kvfs-manual`
- *        # (`diskutil unmount` on macOS) before remounting.
- *
- * 3) Start the example:
+ * 2) Start the example:
  *
  *        bun run start-sqlite-permanent-fuse-manual
  *
- *    Override the mount point with the KVFS_MOUNT environment
- *    variable if `/tmp/kvfs-manual` doesn't suit you.
+ *    The default mount point is /tmp/kvfs-manual; override with the
+ *    KVFS_MOUNT environment variable if you'd rather mount elsewhere.
  *
- * 4) In another terminal, drive the volume with normal shell tools:
+ * 3) The example mounts and drops you into a `bash` session with
+ *    $KVFS_MOUNT pointing at the mount. From inside the shell:
  *
- *        ls -al /tmp/kvfs-manual
- *        echo 'hello' > /tmp/kvfs-manual/greet.txt
- *        cat /tmp/kvfs-manual/greet.txt
- *        echo ' world' >> /tmp/kvfs-manual/greet.txt   # tests append
- *        cat /tmp/kvfs-manual/greet.txt
- *        mkdir /tmp/kvfs-manual/sub
- *        cp /tmp/kvfs-manual/greet.txt /tmp/kvfs-manual/sub/copy.txt
- *        mv /tmp/kvfs-manual/sub/copy.txt /tmp/kvfs-manual/copy.txt
- *        rm /tmp/kvfs-manual/copy.txt
- *        rmdir /tmp/kvfs-manual/sub
- *        df /tmp/kvfs-manual
- *        touch /tmp/kvfs-manual/greet.txt
+ *        ls -al "$KVFS_MOUNT"
+ *        echo 'hello' > "$KVFS_MOUNT/greet.txt"
+ *        cat "$KVFS_MOUNT/greet.txt"
+ *        echo ' world' >> "$KVFS_MOUNT/greet.txt"   # tests append
+ *        cat "$KVFS_MOUNT/greet.txt"
+ *        mkdir "$KVFS_MOUNT/sub"
+ *        cp "$KVFS_MOUNT/greet.txt" "$KVFS_MOUNT/sub/copy.txt"
+ *        mv "$KVFS_MOUNT/sub/copy.txt" "$KVFS_MOUNT/copy.txt"
+ *        rm "$KVFS_MOUNT/copy.txt"
+ *        rmdir "$KVFS_MOUNT/sub"
+ *        df "$KVFS_MOUNT"
+ *        touch "$KVFS_MOUNT/greet.txt"
  *
  *    Each of those issues a FUSE call into our handlers; the kv-fs
- *    state lives in `data/data.sqlite3` (table `blocks_fuse_manual`).
+ *    state lives in `data/data.sqlite3` (table `blocks_fuse_manual`)
+ *    and persists across runs.
  *
- * 5) Stop the example with Ctrl+C (SIGINT) or `kill <pid>` (SIGTERM).
- *    The shutdown path: unmount → KvFilesystem.flush() →
- *    database.close() → exit 0.
+ * 4) Type `exit` (or Ctrl+D) to leave the shell. The example then
+ *    runs the shutdown path: unmount → KvFilesystem.flush() →
+ *    database.close() → exit 0. Sending SIGTERM from outside has
+ *    the same effect (kills the shell, which funnels through
+ *    shell.on('exit')).
  *
  *    If a crash leaves the mount point stale, force-unmount with
- *    `umount /tmp/kvfs-manual` (or `diskutil unmount` on macOS) before
- *    starting again.
+ *    `umount /tmp/kvfs-manual` (Linux) or `diskutil unmount
+ *    /tmp/kvfs-manual` (macOS) before starting again.
  */

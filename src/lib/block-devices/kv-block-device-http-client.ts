@@ -1,33 +1,7 @@
 import { KvBatchOp, KvBatchResult, KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
+import { WireBatchOp, WireBatchResult } from './kv-block-device-common';
 import { INodeId } from '../inode';
 import { Init, KvError_BD_Overflow } from '../utils';
-
-/**
- * On-the-wire shape of one batch op. Mirrors `KvBatchOp` as a
- * discriminated union so TypeScript enforces that e.g. a `write` op
- * always carries `data` and a `partial-read` always carries `start`
- * + `end`. `data` is hex-encoded for transport because the wire envelope
- * is JSON.
- */
-type WireBatchOp
-    = { op: 'read'; blockId: number }
-        | { op: 'write'; blockId: number; data: string }
-        | { op: 'free'; blockId: number }
-        | { op: 'alloc' }
-        | { op: 'partial-read'; blockId: number; start: number; end: number }
-        | { op: 'partial-write'; blockId: number; offset: number; data: string };
-
-/**
- * On-the-wire shape of one batch result. `data` carries hex-encoded
- * bytes from a (partial-)read; `blockId` carries the freshly-allocated
- * ID from an `alloc`. Loose because a single shape covers every op.
- */
-interface WireBatchResult {
-    ok: boolean;
-    data?: string;
-    blockId?: number;
-    error?: string;
-}
 
 function hexEncode(bytes: Uint8Array): string {
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('hex');

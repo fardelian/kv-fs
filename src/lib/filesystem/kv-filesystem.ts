@@ -4,6 +4,23 @@ import { KvBlockDevice } from '../block-devices';
 import { Init, KvError_FS_Exists, KvError_FS_NotEmpty } from '../utils';
 
 /**
+ * How a `KvFilesystem.write` call lays bytes onto a file. Inspired by
+ * the relevant POSIX `open(2)` flags, just enough to cover the cases
+ * a content-aware caller actually needs:
+ *
+ * - `'truncate'` (default) — `O_WRONLY | O_TRUNC`. Clears the file to
+ *   zero bytes, then writes `data` starting at offset 0.
+ * - `'append'` — `O_WRONLY | O_APPEND`. Writes `data` at the current
+ *   end-of-file, growing the file by `data.length` bytes. The
+ *   `offset` argument is ignored.
+ * - `'partial'` — `O_WRONLY` with `pwrite`. Splices `data` in at the
+ *   given `offset`, preserving bytes outside `[offset, offset +
+ *   data.length)`. Extends the file (zero-filling the gap) when the
+ *   write spills past EOF.
+ */
+export type KvWriteMode = 'truncate' | 'append' | 'partial';
+
+/**
  * Core filesystem: walks the superblock + inode tree on top of any
  * `KvBlockDevice`. Operations take an explicit parent directory; for
  * the path-walking facade see `KvFilesystemSimple`.
@@ -39,6 +56,56 @@ export class KvFilesystem {
     public async getKvFile(name: string, directory: KvINodeDirectory): Promise<KvINodeFile> {
         const iNodeId = await directory.getEntry(name);
         return new KvINodeFile(this.blockDevice, iNodeId);
+    }
+
+    /**
+     * Read bytes out of `file` without touching its position cursor.
+     * `start` defaults to `0`; `length` defaults to "as many bytes as
+     * remain after `start`" — `KvINodeFile.readPartial` caps at EOF
+     * so passing a length larger than the file yields the bytes that
+     * are actually there. Reading past EOF returns an empty buffer.
+     */
+    @Init
+    public async read(
+        file: KvINodeFile,
+        start = 0,
+        length: number = Number.MAX_SAFE_INTEGER,
+    ): Promise<Uint8Array> {
+        return await file.readPartial(start, length);
+    }
+
+    /**
+     * Write `data` into `file` according to `mode` (see {@link KvWriteMode}).
+     * `offset` is only consulted when `mode === 'partial'` and defaults
+     * to `0`.
+     *
+     * The file's position cursor is **not** touched — these are
+     * stateless, POSIX-`pwrite`-style writes. Append mode reads
+     * `file.size` and writes there; the file grows by `data.length`.
+     */
+    @Init
+    public async write(
+        file: KvINodeFile,
+        data: Uint8Array,
+        mode: KvWriteMode = 'truncate',
+        offset = 0,
+    ): Promise<void> {
+        // Force the file's @Init to fire so `file.size` reflects the
+        // on-disk inode before `'append'` reads it. Cheap — readPartial
+        // with a zero-length range short-circuits without any block I/O.
+        await file.readPartial(0, 0);
+
+        switch (mode) {
+            case 'truncate':
+                await file.truncate(0);
+                await file.writePartial(0, data);
+                return;
+            case 'append':
+                await file.writePartial(file.size, data);
+                return;
+            case 'partial':
+                await file.writePartial(offset, data);
+        }
     }
 
     /** Remove a file from `directory` and free all of its data blocks. */

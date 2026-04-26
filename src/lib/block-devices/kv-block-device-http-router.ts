@@ -1,31 +1,6 @@
 import { KvBatchOp, KvBlockDevice, KvBlockDeviceMetadata } from './helpers/kv-block-device';
+import { WireBatchOp, WireBatchResult } from './kv-block-device-common';
 import { Router } from 'express';
-
-/**
- * Loose runtime shape for one batch op. Stays as `string` for `op` and
- * leaves all other fields optional so we can validate them ourselves at
- * the JSON boundary — narrowing the type up front would let malformed
- * payloads pass straight through.
- */
-interface WireBatchOp {
-    op: string;
-    blockId?: number;
-    data?: string;
-    start?: number;
-    end?: number;
-    offset?: number;
-}
-
-/**
- * On-the-wire shape of one batch result. `data` is hex-encoded read
- * bytes; `blockId` is the freshly-allocated ID from an `alloc`.
- */
-interface WireBatchResult {
-    ok: boolean;
-    data?: string;
-    blockId?: number;
-    error?: string;
-}
 
 /**
  * Parse `:blockId` and validate it falls inside the device's
@@ -89,69 +64,24 @@ export class KvBlockDeviceHttpRouter {
             // Mounted before POST /blocks so the more specific path
             // matches first.
             .post('/blocks/batch', async (req, res) => {
-                const body = req.body as { ops?: WireBatchOp[] } | undefined;
+                const body = req.body as { ops?: unknown } | undefined;
                 if (!body || !Array.isArray(body.ops)) {
                     res.status(400).json({ error: 'Expected { ops: [...] } JSON body.' });
                     return;
                 }
 
+                // Validate each raw JSON op into a typed `WireBatchOp`,
+                // then convert it to a `KvBatchOp` (raw bytes instead of
+                // hex). Unknown / malformed ops 400 the whole batch.
                 const ops: KvBatchOp[] = [];
-                const requireBlockId = (op: WireBatchOp): boolean => {
-                    if (typeof op.blockId !== 'number') {
-                        res.status(400).json({ error: 'Each op needs a numeric blockId.' });
-                        return false;
-                    }
-                    return true;
-                };
-
-                let aborted = false;
-                for (const wireOp of body.ops) {
-                    if (wireOp.op === 'alloc') {
-                        ops.push({ op: 'alloc' });
-                        continue;
-                    }
-                    if (!requireBlockId(wireOp)) {
-                        aborted = true;
-                        break;
-                    }
-                    const blockId = wireOp.blockId!;
-                    if (wireOp.op === 'read') {
-                        ops.push({ op: 'read', blockId });
-                    } else if (wireOp.op === 'write') {
-                        if (typeof wireOp.data !== 'string') {
-                            res.status(400).json({ error: 'Write op requires hex `data`.' });
-                            aborted = true;
-                            break;
-                        }
-                        ops.push({ op: 'write', blockId, data: hexDecode(wireOp.data) });
-                    } else if (wireOp.op === 'free') {
-                        ops.push({ op: 'free', blockId });
-                    } else if (wireOp.op === 'partial-read') {
-                        if (typeof wireOp.start !== 'number' || typeof wireOp.end !== 'number') {
-                            res.status(400).json({ error: 'partial-read op requires numeric `start` and `end`.' });
-                            aborted = true;
-                            break;
-                        }
-                        ops.push({ op: 'partial-read', blockId, start: wireOp.start, end: wireOp.end });
-                    } else if (wireOp.op === 'partial-write') {
-                        if (typeof wireOp.offset !== 'number') {
-                            res.status(400).json({ error: 'partial-write op requires numeric `offset`.' });
-                            aborted = true;
-                            break;
-                        }
-                        if (typeof wireOp.data !== 'string') {
-                            res.status(400).json({ error: 'partial-write op requires hex `data`.' });
-                            aborted = true;
-                            break;
-                        }
-                        ops.push({ op: 'partial-write', blockId, offset: wireOp.offset, data: hexDecode(wireOp.data) });
-                    } else {
-                        res.status(400).json({ error: `Unknown op: ${wireOp.op}` });
-                        aborted = true;
-                        break;
-                    }
+                const validation = validateWireBatchOps(body.ops);
+                if (!validation.ok) {
+                    res.status(400).json({ error: validation.error });
+                    return;
                 }
-                if (aborted) return;
+                for (const wireOp of validation.ops) {
+                    ops.push(wireOpToBatchOp(wireOp));
+                }
 
                 const results = await this.blockDevice.batch(ops);
                 const wireResults: WireBatchResult[] = results.map((r) => {
@@ -294,6 +224,82 @@ function hexEncode(bytes: Uint8Array): string {
 
 function hexDecode(hex: string): Uint8Array {
     return new Uint8Array(Buffer.from(hex, 'hex'));
+}
+
+/**
+ * Walk an array of raw JSON ops and narrow each one into a
+ * `WireBatchOp`. Returns the narrowed list on success, or the first
+ * validation error (caller 400s the whole request — partial successes
+ * are wrong here because the rest of the batch may depend on the
+ * malformed entry's side effects).
+ */
+function validateWireBatchOps(rawOps: unknown[]):
+    | { ok: true; ops: WireBatchOp[] }
+    | { ok: false; error: string } {
+    const ops: WireBatchOp[] = [];
+    for (const raw of rawOps) {
+        const o = raw as Record<string, unknown>;
+        if (typeof o.op !== 'string') {
+            return { ok: false, error: 'Each op needs a string op.' };
+        }
+        if (o.op === 'alloc') {
+            ops.push({ op: 'alloc' });
+            continue;
+        }
+        if (typeof o.blockId !== 'number') {
+            return { ok: false, error: 'Each op needs a numeric blockId.' };
+        }
+        const blockId = o.blockId;
+        if (o.op === 'read') {
+            ops.push({ op: 'read', blockId });
+        } else if (o.op === 'free') {
+            ops.push({ op: 'free', blockId });
+        } else if (o.op === 'write') {
+            if (typeof o.data !== 'string') {
+                return { ok: false, error: 'Write op requires hex `data`.' };
+            }
+            ops.push({ op: 'write', blockId, data: o.data });
+        } else if (o.op === 'partial-read') {
+            if (typeof o.start !== 'number' || typeof o.end !== 'number') {
+                return { ok: false, error: 'partial-read op requires numeric `start` and `end`.' };
+            }
+            ops.push({ op: 'partial-read', blockId, start: o.start, end: o.end });
+        } else if (o.op === 'partial-write') {
+            if (typeof o.offset !== 'number') {
+                return { ok: false, error: 'partial-write op requires numeric `offset`.' };
+            }
+            if (typeof o.data !== 'string') {
+                return { ok: false, error: 'partial-write op requires hex `data`.' };
+            }
+            ops.push({ op: 'partial-write', blockId, offset: o.offset, data: o.data });
+        } else {
+            return { ok: false, error: `Unknown op: ${o.op}` };
+        }
+    }
+    return { ok: true, ops };
+}
+
+/**
+ * Lift a validated `WireBatchOp` (hex-encoded data) to its `KvBatchOp`
+ * equivalent (raw `Uint8Array` data). The discriminator keeps both
+ * sides aligned so a future variant added to one shows up as a missing
+ * case here.
+ */
+function wireOpToBatchOp(o: WireBatchOp): KvBatchOp {
+    switch (o.op) {
+        case 'read':
+            return { op: 'read', blockId: o.blockId };
+        case 'write':
+            return { op: 'write', blockId: o.blockId, data: hexDecode(o.data) };
+        case 'free':
+            return { op: 'free', blockId: o.blockId };
+        case 'alloc':
+            return { op: 'alloc' };
+        case 'partial-read':
+            return { op: 'partial-read', blockId: o.blockId, start: o.start, end: o.end };
+        case 'partial-write':
+            return { op: 'partial-write', blockId: o.blockId, offset: o.offset, data: hexDecode(o.data) };
+    }
 }
 
 /**

@@ -20,7 +20,8 @@
     "start-sqlite-permanent-fuse-auto": "tsx src/examples/example-sqlite-permanent-fuse-auto.ts",
     "start-sqlite-permanent-fuse-manual": "tsx src/examples/example-sqlite-permanent-fuse-manual.ts",
     "start-http-server": "tsx src/examples/example-http-server.ts",
-    "start-http-client": "tsx src/examples/example-http-client.ts"
+    "start-http-client": "tsx src/examples/example-http-client.ts",
+    "clean": "rm -rf .coverage data node_modules"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

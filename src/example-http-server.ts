@@ -2,8 +2,8 @@ import {
     KvBlockDeviceHttpRouter,
     KvEncryptedBlockDevice,
     KvBlockDeviceSqlite3,
-} from '../lib/block-devices';
-import { KvEncryptionRot13 } from '../lib/encryption';
+} from 'kv-fs-lib';
+import { KvEncryptionRot13 } from 'kv-fs-lib';
 import express from 'express';
 import { mkdirSync } from 'fs';
 import { AsyncDatabase } from 'promised-sqlite3';

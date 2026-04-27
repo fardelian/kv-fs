@@ -10,45 +10,35 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:acceptance": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathIgnorePatterns=/node_modules/ --testPathPatterns=acceptance",
-    "test:unit:coverage": "rm -rf .coverage && node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-    "start-local-fs-permanent": "tsx src/examples/example-local-fs-permanent.ts",
-    "start-memory": "tsx src/examples/example-memory.ts",
-    "start-sqlite": "tsx src/examples/example-sqlite.ts",
-    "start-sqlite-permanent": "tsx src/examples/example-sqlite-permanent.ts",
-    "start-sqlite-permanent-fuse-auto": "tsx src/examples/example-sqlite-permanent-fuse-auto.ts",
-    "start-sqlite-permanent-fuse-manual": "tsx src/examples/example-sqlite-permanent-fuse-manual.ts",
-    "start-http-server": "tsx src/examples/example-http-server.ts",
-    "start-http-client": "tsx src/examples/example-http-client.ts",
+    "start-local-fs-permanent": "tsx src/example-local-fs-permanent.ts",
+    "start-memory": "tsx src/example-memory.ts",
+    "start-sqlite": "tsx src/example-sqlite.ts",
+    "start-sqlite-permanent": "tsx src/example-sqlite-permanent.ts",
+    "start-sqlite-permanent-fuse-auto": "tsx src/example-sqlite-permanent-fuse-auto.ts",
+    "start-sqlite-permanent-fuse-manual": "tsx src/example-sqlite-permanent-fuse-manual.ts",
+    "start-http-server": "tsx src/example-http-server.ts",
+    "start-http-client": "tsx src/example-http-client.ts",
     "clean": "rm -rf .coverage data node_modules"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@faker-js/faker": "10.4.0",
-    "@jest/globals": "30.3.0",
     "@stylistic/eslint-plugin": "5.10.0",
     "@types/express": "5.0.6",
-    "@types/jest": "30.0.0",
     "@types/node": "25.6.0",
     "eslint": "10.2.1",
-    "jest": "30.3.0",
-    "ts-jest": "29.4.9",
     "tsx": "4.20.6",
     "typescript": "6.0.3",
     "typescript-eslint": "8.59.0"
   },
   "dependencies": {
     "express": "5.2.1",
-    "promised-sqlite3": "2.1.0",
-    "zod": "4.3.6"
+    "kv-fs-lib": "file:../kv-fs-lib",
+    "promised-sqlite3": "2.1.0"
   },
   "optionalDependencies": {
     "@cocalc/fuse-native": "2.4.3"
   },
   "overrides": {
-    "sqlite3": "6.0.1",
-    "babel-plugin-istanbul": "^8.0.2",
-    "glob": "^13.0.0"
+    "sqlite3": "6.0.1"
   }
 }

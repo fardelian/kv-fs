@@ -1,7 +1,7 @@
-import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
-import { KvBlockDeviceHttpClient, KvEncryptedBlockDevice } from '../lib/block-devices';
-import { KvEncryptionPassword } from '../lib/encryption';
-import { KvError_FS_Exists } from '../lib/utils';
+import { KvFilesystem, KvFilesystemSimple } from 'kv-fs-lib';
+import { KvBlockDeviceHttpClient, KvEncryptedBlockDevice } from 'kv-fs-lib';
+import { KvEncryptionPassword } from 'kv-fs-lib';
+import { KvError_FS_Exists } from 'kv-fs-lib';
 
 const PORT = 3000;
 

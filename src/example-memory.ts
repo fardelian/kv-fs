@@ -1,5 +1,5 @@
-import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
-import { KvBlockDeviceMemory } from '../lib/block-devices';
+import { KvFilesystem, KvFilesystemSimple } from 'kv-fs-lib';
+import { KvBlockDeviceMemory } from 'kv-fs-lib';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;

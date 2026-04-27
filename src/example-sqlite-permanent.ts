@@ -1,8 +1,8 @@
-import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
-import { KvBlockDeviceFs, KvEncryptedBlockDevice } from '../lib/block-devices';
-import { KvEncryptionRot13 } from '../lib/encryption';
-import { KvError_FS_Exists } from '../lib/utils';
+import { KvFilesystem, KvFilesystemSimple } from 'kv-fs-lib';
+import { KvBlockDeviceSqlite3 } from 'kv-fs-lib';
+import { KvError_FS_Exists } from 'kv-fs-lib';
 import { mkdirSync } from 'fs';
+import { AsyncDatabase } from 'promised-sqlite3';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;
@@ -13,36 +13,35 @@ const SUPER_BLOCK_ID = 0;
 /** Total number of `[N/STEP_COUNT]` log lines this script emits. Bump when adding a step. */
 const STEP_COUNT = 7;
 
-// Dedicated subdir so the per-block files (`{id}.txt`) don't get mixed
-// up with the sqlite examples' `data.sqlite3`.
-const LOCAL_FS_PATH = `${import.meta.dirname}/../../data/local-fs-permanent`;
+const LOCAL_FS_PATH = `${import.meta.dirname}/../../data`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {
     const t0 = new Date().getTime();
 
-    console.log(`[1/${STEP_COUNT}] building local-fs block device wrapped with rot13 encryption...`);
-    const encryption = new KvEncryptionRot13();
-    const fsBlockDevice = new KvBlockDeviceFs(
+    console.log(`[1/${STEP_COUNT}] opening SQLite database...`);
+    const database = await AsyncDatabase.open(`${LOCAL_FS_PATH}/data.sqlite3`);
+
+    const sqliteBlockDevice = new KvBlockDeviceSqlite3(
         BLOCK_SIZE,
         BLOCK_SIZE * TOTAL_BLOCKS,
-        LOCAL_FS_PATH,
+        database,
+        'blocks_permanent',
     );
-    const encryptedFsBlockDevice = new KvEncryptedBlockDevice(fsBlockDevice, encryption);
 
-    // Same gate as example-sqlite-permanent: a freshly-formatted volume
+    // Same gate the FUSE manual example uses: a freshly-formatted volume
     // leaves the superblock + root directory blocks (highest >= 1), so
     // `< 2` covers both "no blocks at all" and "stale partial init".
-    const highestBlockIdBefore = await encryptedFsBlockDevice.getHighestBlockId();
+    const highestBlockIdBefore = await sqliteBlockDevice.getHighestBlockId();
     const needsFormat = highestBlockIdBefore < 2;
     if (needsFormat) {
         console.log(`[2/${STEP_COUNT}] file system does not exist; formatting.`);
-        await KvFilesystem.format(encryptedFsBlockDevice, TOTAL_NODES);
+        await KvFilesystem.format(sqliteBlockDevice, TOTAL_NODES);
     } else {
         console.log(`[2/${STEP_COUNT}] file system exists (highestBlockId=${highestBlockIdBefore}); reusing.`);
     }
 
-    const fileSystem = new KvFilesystem(encryptedFsBlockDevice, SUPER_BLOCK_ID);
+    const fileSystem = new KvFilesystem(sqliteBlockDevice, SUPER_BLOCK_ID);
     const easyFileSystem = new KvFilesystemSimple(fileSystem, '/');
 
     const testPath1 = '/home/florin/test1.txt';
@@ -79,7 +78,10 @@ async function run() {
     console.log('  rootDir:', await rootDir.read());
 
     // Per-run timestamp drop: /YYYY-MM-DD/HH-MM-SS.txt with the full ISO
-    // string as content. Same pattern as example-sqlite-permanent.
+    // string as content. The directory exists after the first run of the
+    // day; subsequent runs reuse it (createDirectory throws
+    // KvError_FS_Exists when the entry is already there — swallow that
+    // one and let any other error propagate).
     const isoNow = new Date().toISOString();
     const dayDir = `/${isoNow.slice(0, 10)}`;
     const timePath = `${dayDir}/${isoNow.slice(11, 19).replace(/:/g, '-')}.txt`;
@@ -93,7 +95,8 @@ async function run() {
     await timeFile.write(new TextEncoder().encode(isoNow));
     console.log(`  wrote ${timePath} = "${isoNow}"`);
 
-    // List every previous run's timestamp drop.
+    // List every previous run's timestamp drop. Date directories at the
+    // root match `YYYY-MM-DD`; ignore everything else (e.g. /home).
     console.log(`[7/${STEP_COUNT}] listing all run timestamps:`);
     const rootEntries = await (await easyFileSystem.getDirectory('/')).read();
     const dayDirs = [...rootEntries.keys()]
@@ -110,10 +113,10 @@ async function run() {
     }
 
     console.log('device:', {
-        blockSize: encryptedFsBlockDevice.getBlockSize(),
-        capacityBytes: encryptedFsBlockDevice.getCapacityBytes(),
-        capacityBlocks: encryptedFsBlockDevice.getCapacityBlocks(),
-        highestBlockId: await encryptedFsBlockDevice.getHighestBlockId(),
+        blockSize: sqliteBlockDevice.getBlockSize(),
+        capacityBytes: sqliteBlockDevice.getCapacityBytes(),
+        capacityBlocks: sqliteBlockDevice.getCapacityBlocks(),
+        highestBlockId: await sqliteBlockDevice.getHighestBlockId(),
     });
 
     console.log('time:', new Date().getTime() - t0);

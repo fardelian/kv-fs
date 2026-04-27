@@ -28,10 +28,10 @@
 import { stat } from 'fs/promises';
 import { mkdirSync } from 'fs';
 import { AsyncDatabase } from 'promised-sqlite3';
-import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
-import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
-import { KvFuseHandlers } from '../lib/fuse';
-import { KvError_FS_Exists } from '../lib/utils';
+import { KvBlockDeviceSqlite3 } from 'kv-fs-lib';
+import { KvFilesystem, KvFilesystemSimple } from 'kv-fs-lib';
+import { KvFuseHandlers } from 'kv-fs-lib';
+import { KvError_FS_Exists } from 'kv-fs-lib';
 
 const BLOCK_SIZE = 4096;
 const TOTAL_BLOCKS = 1000;

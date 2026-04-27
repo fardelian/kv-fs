@@ -1,8 +1,8 @@
-import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
-import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
-import { KvEncryptionRot13 } from '../lib/encryption';
+import { KvFilesystem, KvFilesystemSimple } from 'kv-fs-lib';
+import { KvBlockDeviceSqlite3 } from 'kv-fs-lib';
+import { KvEncryptionRot13 } from 'kv-fs-lib';
 import { mkdirSync } from 'fs';
-import { KvEncryptedBlockDevice } from '../lib/block-devices';
+import { KvEncryptedBlockDevice } from 'kv-fs-lib';
 import { AsyncDatabase } from 'promised-sqlite3';
 
 const BLOCK_SIZE = 4096;

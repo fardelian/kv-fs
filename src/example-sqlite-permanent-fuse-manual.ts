@@ -33,10 +33,10 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AsyncDatabase } from 'promised-sqlite3';
-import { KvBlockDeviceSqlite3 } from '../lib/block-devices';
-import { KvFilesystem, KvFilesystemSimple } from '../lib/filesystem';
-import { KvFuseError, KvFuseHandlers } from '../lib/fuse';
-import { KvError_FS_Exists } from '../lib/utils';
+import { KvBlockDeviceSqlite3 } from 'kv-fs-lib';
+import { KvFilesystem, KvFilesystemSimple } from 'kv-fs-lib';
+import { KvFuseError, KvFuseHandlers } from 'kv-fs-lib';
+import { KvError_FS_Exists } from 'kv-fs-lib';
 
 // The minimal type stub for `@cocalc/fuse-native` lives in the
 // sibling `cocalc-fuse-native.d.ts` so this file stays a plain module.

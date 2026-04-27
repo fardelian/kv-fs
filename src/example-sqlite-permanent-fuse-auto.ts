@@ -42,7 +42,7 @@ const SUPER_BLOCK_ID = 0;
 const STEP_COUNT = 6;
 
 const TABLE_NAME = 'blocks_fuse_demo';
-const LOCAL_FS_PATH = `${import.meta.dirname}/../../data`;
+const LOCAL_FS_PATH = `${import.meta.dirname}/../data`;
 const DB_PATH = `${LOCAL_FS_PATH}/data.sqlite3`;
 
 mkdirSync(LOCAL_FS_PATH, { recursive: true });

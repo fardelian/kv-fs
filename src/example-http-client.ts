@@ -3,7 +3,7 @@ import { KvBlockDeviceHttpClient, KvEncryptedBlockDevice } from 'kv-fs-lib';
 import { KvEncryptionPassword } from 'kv-fs-lib';
 import { KvError_FS_Exists } from 'kv-fs-lib';
 
-const PORT = 3000;
+const PORT = 3003;
 
 const ENC_PASSWORD = 'the_user_password';
 const ENC_SALT = 'some_static_secret';

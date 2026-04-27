@@ -15,7 +15,7 @@ const STEP_COUNT = 7;
 
 // Dedicated subdir so the per-block files (`{id}.txt`) don't get mixed
 // up with the sqlite examples' `data.sqlite3`.
-const LOCAL_FS_PATH = `${import.meta.dirname}/../../data/local-fs-permanent`;
+const LOCAL_FS_PATH = `${import.meta.dirname}/../data/local-fs-permanent`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {

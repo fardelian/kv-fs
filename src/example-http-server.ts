@@ -8,14 +8,14 @@ import express from 'express';
 import { mkdirSync } from 'fs';
 import { AsyncDatabase } from 'promised-sqlite3';
 
-const BLOCK_SIZE = 4096;
-const TOTAL_BLOCKS = 1000;
-const PORT = 3000;
+const BLOCK_SIZE = 100 * 1024;
+const TOTAL_BLOCKS = 100;
+const PORT = 3003;
 
 /** Total number of `[N/STEP_COUNT]` log lines this script emits. Bump when adding a step. */
 const STEP_COUNT = 4;
 
-const LOCAL_FS_PATH = `${import.meta.dirname}/../../data`;
+const LOCAL_FS_PATH = `${import.meta.dirname}/../data`;
 mkdirSync(LOCAL_FS_PATH, { recursive: true });
 
 async function run() {
